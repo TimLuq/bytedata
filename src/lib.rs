@@ -8,7 +8,7 @@
 //! ## Example
 //!
 //! ```
-//! use bytedata::ByteData;
+//! use ::bytedata::ByteData;
 //!
 //! # fn main() {
 //! const STATIC: ByteData<'static> = ByteData::from_static(b"hello world");
@@ -23,13 +23,13 @@
 extern crate alloc;
 
 mod bytedata;
-pub use bytedata::*;
+pub use self::bytedata::*;
 
 mod shared_bytes;
-pub use shared_bytes::*;
+pub use self::shared_bytes::*;
 
 mod shared_bytes_builder;
-pub use shared_bytes_builder::*;
+pub use self::shared_bytes_builder::*;
 
 #[cfg(feature = "bytes_1")]
 mod bytes_1;
