@@ -31,6 +31,9 @@ pub use self::shared_bytes::*;
 mod shared_bytes_builder;
 pub use self::shared_bytes_builder::*;
 
+mod stringdata;
+pub use self::stringdata::*;
+
 #[cfg(feature = "bytes_1")]
 mod bytes_1;
 

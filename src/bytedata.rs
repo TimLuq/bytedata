@@ -3,7 +3,7 @@ use core::{
     slice::SliceIndex,
 };
 
-use alloc::vec::Vec;
+use alloc::{borrow::Cow, vec::Vec};
 
 use crate::SharedBytes;
 
@@ -22,16 +22,38 @@ impl<'a> ByteData<'a> {
         Self::Static(&[])
     }
     /// Creates a `ByteData` from a slice of bytes.
+    #[inline]
     pub const fn from_static(dat: &'static [u8]) -> Self {
         Self::Static(dat)
     }
     /// Creates a `ByteData` from a borrowed slice of bytes.
+    #[inline]
     pub const fn from_borrowed(dat: &'a [u8]) -> Self {
         Self::Borrowed(dat)
     }
     /// Creates a `ByteData` from a `SharedBytes`.
+    #[inline]
     pub const fn from_shared(dat: SharedBytes) -> Self {
         Self::Shared(dat)
+    }
+    /// Creates a `ByteData` from a `Vec<u8>`.
+    #[inline]
+    pub fn from_owned(dat: Vec<u8>) -> Self {
+        Self::Shared(dat.into())
+    }
+    /// Creates a `ByteData` from a `Cow<'_, [u8]>`.
+    pub fn from_cow(dat: Cow<'a, [u8]>) -> Self {
+        match dat {
+            Cow::Borrowed(b) => Self::from_borrowed(b),
+            Cow::Owned(o) => Self::from_owned(o),
+        }
+    }
+    /// Creates a `ByteData` from a `Cow<'static, [u8]>`.
+    pub fn from_cow_static(dat: Cow<'static, [u8]>) -> Self {
+        match dat {
+            Cow::Borrowed(b) => Self::from_static(b),
+            Cow::Owned(o) => Self::from_owned(o),
+        }
     }
     /// Returns the underlying byte slice.
     pub const fn as_slice(&self) -> &[u8] {
@@ -69,11 +91,13 @@ impl<'a> ByteData<'a> {
     }
 
     /// Check if the ending of a `SharedBytes` matches the given bytes.
+    #[inline]
     pub const fn ends_with(&self, needle: &[u8]) -> bool {
         crate::const_ends_with(self.as_slice(), needle)
     }
 
     /// Check if the beginning of a `SharedBytes` matches the given bytes.
+    #[inline]
     pub const fn starts_with(&self, needle: &[u8]) -> bool {
         crate::const_starts_with(self.as_slice(), needle)
     }
