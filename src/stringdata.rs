@@ -7,6 +7,7 @@ use alloc::{borrow::Cow, string::String, vec::Vec};
 
 use crate::{ByteData, SharedBytes};
 
+#[derive(Clone)]
 #[repr(transparent)]
 pub struct StringData<'a> {
     data: ByteData<'a>,
