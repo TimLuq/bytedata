@@ -3,10 +3,17 @@ use core::{
     slice::SliceIndex,
 };
 
+#[cfg(feature = "alloc")]
 use alloc::{borrow::Cow, string::String, vec::Vec};
 
-use crate::{ByteData, SharedBytes};
+use crate::ByteData;
 
+#[cfg(feature = "alloc")]
+use crate::SharedBytes;
+
+/// A wrapper around a [`ByteData`] that is guaranteed to be valid UTF-8.
+/// 
+/// `StringData<'a>` is to `ByteData<'a>` what `&'a str` is to `&'a [u8]`.
 #[derive(Clone)]
 #[repr(transparent)]
 pub struct StringData<'a> {
@@ -14,12 +21,15 @@ pub struct StringData<'a> {
 }
 
 impl<'a> StringData<'a> {
+
     /// Returns an empty `StringData`.
+    #[inline]
     pub const fn empty() -> Self {
         StringData {
             data: ByteData::Static(&[]),
         }
     }
+
     /// Creates a `StringData` from a slice of bytes.
     #[inline]
     pub const fn from_static(dat: &'static str) -> Self {
@@ -27,6 +37,7 @@ impl<'a> StringData<'a> {
             data: ByteData::Static(dat.as_bytes()),
         }
     }
+
     /// Creates a `StringData` from a borrowed slice of bytes.
     #[inline]
     pub const fn from_borrowed(dat: &'a str) -> Self {
@@ -34,7 +45,10 @@ impl<'a> StringData<'a> {
             data: ByteData::Borrowed(dat.as_bytes()),
         }
     }
+    
+    #[cfg(feature = "alloc")]
     /// Creates a `StringData` from a `SharedBytes`.
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     pub const fn try_from_shared(dat: SharedBytes) -> Result<Self, SharedBytes> {
         if core::str::from_utf8(dat.as_slice()).is_err() {
             return Err(dat);
@@ -43,6 +57,7 @@ impl<'a> StringData<'a> {
             data: ByteData::Shared(dat),
         })
     }
+
     /// Creates a `StringData` from `ByteData`.
     pub const fn try_from_bytedata(dat: ByteData<'a>) -> Result<Self, ByteData> {
         if core::str::from_utf8(dat.as_slice()).is_err() {
@@ -50,82 +65,100 @@ impl<'a> StringData<'a> {
         }
         Ok(StringData { data: dat })
     }
+
     /// Creates a `StringData` from `ByteData`.
     ///
     /// # Safety
     ///
     /// The data must be valid UTF-8.
     /// Otherwise, the behavior is undefined for any context using the value.
-    /// Prefer `try_from_bytedata` if you are unsure.
+    /// Prefer [`try_from_bytedata`] if you are unsure.
     pub const unsafe fn from_bytedata_unchecked(dat: ByteData<'a>) -> Self {
         StringData { data: dat }
     }
+
+    #[cfg(feature = "alloc")]
     /// Creates a `StringData` from a `String`.
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     pub fn from_owned(dat: String) -> Self {
         StringData {
             data: ByteData::Shared(dat.into_bytes().into()),
         }
     }
+
+    #[cfg(feature = "alloc")]
     /// Creates a `StringData` from a `Cow<'_, str>`.
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     pub fn from_cow(dat: Cow<'a, str>) -> Self {
         match dat {
             Cow::Borrowed(b) => Self::from_borrowed(b),
             Cow::Owned(o) => Self::from_owned(o),
         }
     }
+    
+    #[cfg(feature = "alloc")]
     /// Creates a `StringData` from a `Cow<'static, str>`.
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     pub fn from_cow_static(dat: Cow<'static, str>) -> Self {
         match dat {
             Cow::Borrowed(b) => Self::from_static(b),
             Cow::Owned(o) => Self::from_owned(o),
         }
     }
+
     /// Returns the underlying byte slice.
     #[inline]
     pub const fn as_bytes(&self) -> &[u8] {
         self.data.as_slice()
     }
+
     /// Returns the underlying `str`.
     #[inline]
     pub const fn as_str(&self) -> &str {
         unsafe { core::str::from_utf8_unchecked(self.data.as_slice()) }
     }
+
     /// Returns the length of the underlying byte slice.
     #[inline]
     pub const fn len(&self) -> usize {
         match &self.data {
             ByteData::Static(dat) => dat.len(),
             ByteData::Borrowed(dat) => dat.len(),
+            #[cfg(feature = "alloc")]
             ByteData::Shared(dat) => dat.len(),
         }
     }
+
     /// Returns `true` if the underlying byte slice is empty.
     #[inline]
     pub const fn is_empty(&self) -> bool {
         self.data.is_empty()
     }
+
     /// Check if the underlying byte slice is equal to another. This can be used in a `const` context.
     #[inline]
     pub const fn eq_const(&self, other: &StringData<'_>) -> bool {
         crate::const_eq(self.as_bytes(), other.as_bytes())
     }
+
     /// Check if the underlying byte slice is equal to another. This can be used in a `const` context.
     #[inline]
     pub const fn eq_slice(&self, other: &[u8]) -> bool {
         crate::const_eq(self.as_bytes(), other)
     }
+
     /// Check if the underlying byte slice is equal to another. This can be used in a `const` context.
     #[inline]
     pub const fn eq_str(&self, other: &str) -> bool {
         crate::const_eq(self.as_bytes(), other.as_bytes())
     }
 
-    /// Check if the ending of a `SharedBytes` matches the given bytes.
+    /// Check if the ending of a `StringData` matches the given str.
     pub const fn ends_with(&self, needle: &str) -> bool {
         crate::const_ends_with(self.as_bytes(), needle.as_bytes())
     }
 
-    /// Check if the beginning of a `SharedBytes` matches the given bytes.
+    /// Check if the beginning of a `StringData` matches the given str.
     pub const fn starts_with(&self, needle: &str) -> bool {
         crate::const_starts_with(self.as_bytes(), needle.as_bytes())
     }
@@ -170,6 +203,7 @@ impl<'a> StringData<'a> {
         let data = self.data.sliced(range);
         StringData { data }
     }
+
     /// Transform the range of bytes this `ByteData` represents.
     #[inline]
     pub fn into_sliced<R: RangeBounds<usize> + SliceIndex<str, Output = str>>(
@@ -180,6 +214,7 @@ impl<'a> StringData<'a> {
         self.data.make_sliced(range);
         self
     }
+
     /// Transform the range of bytes this `ByteData` represents.
     #[inline]
     pub fn make_sliced<R: RangeBounds<usize> + SliceIndex<str, Output = str>>(
@@ -189,7 +224,10 @@ impl<'a> StringData<'a> {
         let range = self.check_sliced(range);
         self.data.make_sliced(range);
     }
+
+    #[cfg(feature = "alloc")]
     /// Transform any borrowed data into shared data. This is useful when you wish to change the lifetime of the data.
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     #[inline]
     pub fn into_shared<'s>(self) -> StringData<'s> {
         let StringData { data } = self;
@@ -197,9 +235,12 @@ impl<'a> StringData<'a> {
             data: data.into_shared(),
         }
     }
+    
+    #[cfg(feature = "alloc")]
     /// Transform any borrowed data into shared data of a specific range. This is useful when you wish to change the lifetime of the data.
     ///
     /// This is essentially the same as `into_shared().into_sliced(range)`, but it is more efficient.
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     #[inline]
     pub fn into_shared_range<'s, R: RangeBounds<usize> + SliceIndex<str, Output = str>>(
         self,
@@ -211,6 +252,7 @@ impl<'a> StringData<'a> {
             data: data.into_shared_range(range),
         }
     }
+
 }
 
 impl AsRef<[u8]> for StringData<'_> {
@@ -235,6 +277,8 @@ impl<'a> From<&'a str> for StringData<'a> {
     }
 }
 
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl<'a> TryFrom<SharedBytes> for StringData<'a> {
     type Error = SharedBytes;
     #[inline]
@@ -243,6 +287,8 @@ impl<'a> TryFrom<SharedBytes> for StringData<'a> {
     }
 }
 
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl<'a> From<String> for StringData<'a> {
     #[inline]
     fn from(dat: String) -> Self {
@@ -299,6 +345,8 @@ impl PartialEq<StringData<'_>> for str {
     }
 }
 
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl PartialEq<Vec<u8>> for StringData<'_> {
     #[inline]
     fn eq(&self, other: &Vec<u8>) -> bool {
@@ -306,6 +354,8 @@ impl PartialEq<Vec<u8>> for StringData<'_> {
     }
 }
 
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl PartialEq<String> for StringData<'_> {
     #[inline]
     fn eq(&self, other: &String) -> bool {
@@ -313,6 +363,8 @@ impl PartialEq<String> for StringData<'_> {
     }
 }
 
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl PartialEq<StringData<'_>> for Vec<u8> {
     #[inline]
     fn eq(&self, other: &StringData<'_>) -> bool {
@@ -320,6 +372,8 @@ impl PartialEq<StringData<'_>> for Vec<u8> {
     }
 }
 
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl PartialEq<StringData<'_>> for String {
     #[inline]
     fn eq(&self, other: &StringData<'_>) -> bool {
@@ -385,6 +439,8 @@ impl PartialOrd<StringData<'_>> for str {
     }
 }
 
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl PartialOrd<Vec<u8>> for StringData<'_> {
     #[inline]
     fn partial_cmp(&self, other: &Vec<u8>) -> Option<core::cmp::Ordering> {
@@ -392,6 +448,8 @@ impl PartialOrd<Vec<u8>> for StringData<'_> {
     }
 }
 
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl PartialOrd<StringData<'_>> for Vec<u8> {
     #[inline]
     fn partial_cmp(&self, other: &StringData<'_>) -> Option<core::cmp::Ordering> {
@@ -399,6 +457,8 @@ impl PartialOrd<StringData<'_>> for Vec<u8> {
     }
 }
 
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl PartialOrd<String> for StringData<'_> {
     #[inline]
     fn partial_cmp(&self, other: &String) -> Option<core::cmp::Ordering> {
@@ -406,6 +466,8 @@ impl PartialOrd<String> for StringData<'_> {
     }
 }
 
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl PartialOrd<StringData<'_>> for String {
     #[inline]
     fn partial_cmp(&self, other: &StringData<'_>) -> Option<core::cmp::Ordering> {

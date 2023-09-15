@@ -1,4 +1,5 @@
 /// Concatenate a list of byte literals or const byte slices into a single static byte slice.
+#[cfg_attr(docsrs, doc(cfg(feature = "macros")))]
 #[macro_export]
 macro_rules! concat_bytes_static {
     ($($e:expr),* $(,)*) => {
@@ -25,6 +26,7 @@ macro_rules! concat_bytes_static {
 /// static HELLO_WORLD: &str = ::bytedata::concat_str_static!(HELLO, ::bytedata::const_or_str(Some(" "), ""), WORLD, "!");
 /// assert_eq!(HELLO_WORLD, "Hello world!");
 /// ```
+#[cfg_attr(docsrs, doc(cfg(feature = "macros")))]
 #[macro_export]
 macro_rules! concat_str_static {
     ($($e:expr),* $(,)*) => {

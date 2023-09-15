@@ -1,5 +1,9 @@
+
+#[cfg(feature = "alloc")]
 mod shared_bytes;
+#[cfg(feature = "alloc")]
 mod shared_bytes_builder;
+
 mod stringdata;
 
 #[cfg(feature = "macros")]

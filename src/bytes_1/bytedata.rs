@@ -2,16 +2,21 @@ use ::bytes_1 as bytes;
 
 use crate::ByteData;
 
+#[cfg_attr(docsrs, doc(cfg(feature = "bytes_1")))]
 impl From<ByteData<'_>> for bytes::Bytes {
     fn from(dat: ByteData) -> Self {
         match dat {
             ByteData::Static(dat) => bytes::Bytes::from_static(dat),
-            ByteData::Shared(dat) => dat.into(),
             ByteData::Borrowed(dat) => bytes::Bytes::copy_from_slice(dat),
+            #[cfg(feature = "alloc")]
+            ByteData::Shared(dat) => dat.into(),
         }
     }
 }
 
+#[cfg(all(not(feature = "bytes_1_safe"), feature = "alloc"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "bytes_1")))]
 impl From<bytes::Bytes> for ByteData<'_> {
     fn from(dat: bytes::Bytes) -> Self {
         let b = unsafe { core::mem::transmute::<&bytes::Bytes, &super::SBytes>(&dat) };
@@ -26,6 +31,16 @@ impl From<bytes::Bytes> for ByteData<'_> {
     }
 }
 
+#[cfg(all(feature = "bytes_1_safe", feature = "alloc"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "bytes_1")))]
+impl From<bytes::Bytes> for ByteData<'_> {
+    fn from(dat: bytes::Bytes) -> Self {
+        Self::from_shared(dat.into())
+    }
+}
+
+#[cfg_attr(docsrs, doc(cfg(feature = "bytes_1")))]
 impl bytes::Buf for ByteData<'_> {
     #[inline]
     fn remaining(&self) -> usize {

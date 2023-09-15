@@ -2,6 +2,7 @@ use ::bytes_1 as bytes;
 
 use crate::SharedBytesBuilder;
 
+#[cfg_attr(docsrs, doc(cfg(feature = "bytes_1")))]
 unsafe impl bytes::BufMut for SharedBytesBuilder {
     fn remaining_mut(&self) -> usize {
         (0xFFFF_FFFF - self.off) as usize

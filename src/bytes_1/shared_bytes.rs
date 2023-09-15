@@ -1,11 +1,15 @@
+
+#[cfg(not(feature = "bytes_1_safe"))]
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 
+#[cfg(not(feature = "bytes_1_safe"))]
 use alloc::vec::Vec;
 
 use ::bytes_1 as bytes;
 
 use crate::SharedBytes;
 
+#[cfg(not(feature = "bytes_1_safe"))]
 /// A vtable compatible with bytes::Vtable.
 static SHARED_BYTES_BVT: super::SBytesVtable = super::SBytesVtable {
     clone: |data, ptr, len| {
@@ -42,6 +46,16 @@ static SHARED_BYTES_BVT: super::SBytesVtable = super::SBytesVtable {
     },
 };
 
+#[cfg(feature = "bytes_1_safe")]
+#[cfg_attr(docsrs, doc(cfg(feature = "bytes_1")))]
+impl From<SharedBytes> for bytes::Bytes {
+    fn from(dat: SharedBytes) -> Self {
+        bytes::Bytes::copy_from_slice(dat.as_slice())
+    }
+}
+
+#[cfg(not(feature = "bytes_1_safe"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "bytes_1")))]
 impl From<SharedBytes> for bytes::Bytes {
     fn from(dat: SharedBytes) -> Self {
         super::SBytes {
@@ -54,12 +68,14 @@ impl From<SharedBytes> for bytes::Bytes {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "bytes_1")))]
 impl From<bytes::Bytes> for SharedBytes {
     fn from(dat: bytes::Bytes) -> Self {
         Self::from_slice(dat.as_ref())
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "bytes_1")))]
 impl bytes::Buf for SharedBytes {
     #[inline]
     fn remaining(&self) -> usize {

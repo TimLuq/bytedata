@@ -3,87 +3,118 @@ use core::{
     slice::SliceIndex,
 };
 
+#[cfg(feature = "alloc")]
 use alloc::{borrow::Cow, vec::Vec};
 
+#[cfg(feature = "alloc")]
 use crate::SharedBytes;
 
 /// A container of bytes that can be either static, borrowed, or shared.
 #[derive(Clone, Debug)]
 #[non_exhaustive]
 pub enum ByteData<'a> {
+    /// A static byte slice.
     Static(&'static [u8]),
+    /// A borrowed byte slice.
     Borrowed(&'a [u8]),
+    #[cfg(feature = "alloc")]
+    /// A shared byte slice.
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     Shared(SharedBytes),
 }
 
 impl<'a> ByteData<'a> {
+
     /// Returns an empty `ByteData`.
+    #[inline]
     pub const fn empty() -> Self {
         Self::Static(&[])
     }
+
     /// Creates a `ByteData` from a slice of bytes.
     #[inline]
     pub const fn from_static(dat: &'static [u8]) -> Self {
         Self::Static(dat)
     }
+
     /// Creates a `ByteData` from a borrowed slice of bytes.
     #[inline]
     pub const fn from_borrowed(dat: &'a [u8]) -> Self {
         Self::Borrowed(dat)
     }
+
+    #[cfg(feature = "alloc")]
     /// Creates a `ByteData` from a `SharedBytes`.
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     #[inline]
     pub const fn from_shared(dat: SharedBytes) -> Self {
         Self::Shared(dat)
     }
+
+    #[cfg(feature = "alloc")]
     /// Creates a `ByteData` from a `Vec<u8>`.
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     #[inline]
     pub fn from_owned(dat: Vec<u8>) -> Self {
         Self::Shared(dat.into())
     }
+
+    #[cfg(feature = "alloc")]
     /// Creates a `ByteData` from a `Cow<'_, [u8]>`.
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     pub fn from_cow(dat: Cow<'a, [u8]>) -> Self {
         match dat {
             Cow::Borrowed(b) => Self::from_borrowed(b),
             Cow::Owned(o) => Self::from_owned(o),
         }
     }
+
+    #[cfg(feature = "alloc")]
     /// Creates a `ByteData` from a `Cow<'static, [u8]>`.
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     pub fn from_cow_static(dat: Cow<'static, [u8]>) -> Self {
         match dat {
             Cow::Borrowed(b) => Self::from_static(b),
             Cow::Owned(o) => Self::from_owned(o),
         }
     }
+
     /// Returns the underlying byte slice.
     pub const fn as_slice(&self) -> &[u8] {
         match self {
             Self::Static(dat) => dat,
             Self::Borrowed(dat) => dat,
+            #[cfg(feature = "alloc")]
             Self::Shared(dat) => dat.as_slice(),
         }
     }
+
     /// Returns the length of the underlying byte slice.
     pub const fn len(&self) -> usize {
         match self {
             Self::Static(dat) => dat.len(),
             Self::Borrowed(dat) => dat.len(),
+            #[cfg(feature = "alloc")]
             Self::Shared(dat) => dat.len(),
         }
     }
+
     /// Returns `true` if the underlying byte slice is empty.
     pub const fn is_empty(&self) -> bool {
         match self {
             Self::Static(dat) => dat.is_empty(),
             Self::Borrowed(dat) => dat.is_empty(),
+            #[cfg(feature = "alloc")]
             Self::Shared(dat) => dat.is_empty(),
         }
     }
+
     /// Check if the underlying byte slice is equal to another. This can be used in a `const` context.
     #[inline]
     pub const fn eq_const(&self, other: &ByteData<'_>) -> bool {
         crate::const_eq(self.as_slice(), other.as_slice())
     }
+
     /// Check if the underlying byte slice is equal to another. This can be used in a `const` context.
     #[inline]
     pub const fn eq_slice(&self, other: &[u8]) -> bool {
@@ -110,9 +141,11 @@ impl<'a> ByteData<'a> {
         match self {
             Self::Static(dat) => Self::Static(&dat[range]),
             Self::Borrowed(dat) => Self::Borrowed(&dat[range]),
+            #[cfg(feature = "alloc")]
             Self::Shared(dat) => Self::Shared(dat.sliced_range(range)),
         }
     }
+
     /// Transform the range of bytes this `ByteData` represents.
     pub fn into_sliced<R: RangeBounds<usize> + SliceIndex<[u8], Output = [u8]>>(
         self,
@@ -121,9 +154,11 @@ impl<'a> ByteData<'a> {
         match self {
             Self::Static(dat) => Self::Static(&dat[range]),
             Self::Borrowed(dat) => Self::Borrowed(&dat[range]),
+            #[cfg(feature = "alloc")]
             Self::Shared(dat) => Self::Shared(dat.into_sliced_range(range)),
         }
     }
+
     /// Transform the range of bytes this `ByteData` represents.
     pub fn make_sliced<R: RangeBounds<usize> + SliceIndex<[u8], Output = [u8]>>(
         &'_ mut self,
@@ -132,12 +167,16 @@ impl<'a> ByteData<'a> {
         match self {
             Self::Static(dat) => *dat = &dat[range],
             Self::Borrowed(dat) => *dat = &dat[range],
+            #[cfg(feature = "alloc")]
             Self::Shared(dat) => {
                 dat.make_sliced_range(range);
             }
         }
     }
+
+    #[cfg(feature = "alloc")]
     /// Transform any borrowed data into shared data. This is useful when you wish to change the lifetime of the data.
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     pub fn into_shared<'s>(self) -> ByteData<'s> {
         match self {
             Self::Borrowed(dat) => ByteData::Shared(SharedBytes::from_slice(dat)),
@@ -145,9 +184,12 @@ impl<'a> ByteData<'a> {
             Self::Shared(dat) => ByteData::Shared(dat),
         }
     }
+    
+    #[cfg(feature = "alloc")]
     /// Transform any borrowed data into shared data of a specific range. This is useful when you wish to change the lifetime of the data.
     ///
     /// This is essentially the same as `into_shared().into_sliced(range)`, but it is more efficient.
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     pub fn into_shared_range<'s, R: RangeBounds<usize> + SliceIndex<[u8], Output = [u8]>>(
         self,
         range: R,
@@ -156,6 +198,19 @@ impl<'a> ByteData<'a> {
             Self::Borrowed(dat) => ByteData::Shared(SharedBytes::from_slice(&dat[range])),
             Self::Shared(dat) => ByteData::Shared(dat.into_sliced_range(range)),
             Self::Static(dat) => ByteData::Static(&dat[range]),
+        }
+    }
+}
+
+impl ByteData<'static> {
+    /// Returns a `ByteData` with the given range of bytes.
+    #[inline]
+    pub fn statically_borrowed(self) -> ByteData<'static> {
+        match self {
+            Self::Static(dat) => ByteData::Static(dat),
+            Self::Borrowed(dat) => ByteData::Static(dat),
+            #[cfg(feature = "alloc")]
+            Self::Shared(dat) => ByteData::Shared(dat),
         }
     }
 }
@@ -182,6 +237,7 @@ impl<'a> From<&'a [u8]> for ByteData<'a> {
     }
 }
 
+#[cfg(feature = "alloc")]
 impl<'a> From<SharedBytes> for ByteData<'a> {
     #[inline]
     fn from(dat: SharedBytes) -> Self {
@@ -189,6 +245,7 @@ impl<'a> From<SharedBytes> for ByteData<'a> {
     }
 }
 
+#[cfg(feature = "alloc")]
 impl<'a> From<Vec<u8>> for ByteData<'a> {
     #[inline]
     fn from(dat: Vec<u8>) -> Self {
@@ -235,6 +292,8 @@ impl PartialEq<ByteData<'_>> for [u8] {
     }
 }
 
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl PartialEq<Vec<u8>> for ByteData<'_> {
     #[inline]
     fn eq(&self, other: &Vec<u8>) -> bool {
@@ -242,6 +301,8 @@ impl PartialEq<Vec<u8>> for ByteData<'_> {
     }
 }
 
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl PartialEq<ByteData<'_>> for Vec<u8> {
     #[inline]
     fn eq(&self, other: &ByteData<'_>) -> bool {
@@ -279,6 +340,8 @@ impl PartialOrd<ByteData<'_>> for [u8] {
     }
 }
 
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl PartialOrd<Vec<u8>> for ByteData<'_> {
     #[inline]
     fn partial_cmp(&self, other: &Vec<u8>) -> Option<core::cmp::Ordering> {
@@ -286,6 +349,8 @@ impl PartialOrd<Vec<u8>> for ByteData<'_> {
     }
 }
 
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl PartialOrd<ByteData<'_>> for Vec<u8> {
     #[inline]
     fn partial_cmp(&self, other: &ByteData<'_>) -> Option<core::cmp::Ordering> {

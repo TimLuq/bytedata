@@ -19,7 +19,10 @@
 //! # }
 
 #![no_std]
+#![cfg_attr(docsrs, feature(doc_cfg))]
+#![deny(missing_docs)]
 
+#[cfg(feature = "alloc")]
 extern crate alloc;
 
 mod bytedata;
@@ -27,10 +30,14 @@ use core::panic;
 
 pub use self::bytedata::*;
 
+#[cfg(feature = "alloc")]
 mod shared_bytes;
+#[cfg(feature = "alloc")]
 pub use self::shared_bytes::*;
 
+#[cfg(feature = "alloc")]
 mod shared_bytes_builder;
+#[cfg(feature = "alloc")]
 pub use self::shared_bytes_builder::*;
 
 mod stringdata;
@@ -44,6 +51,8 @@ pub use self::macros::*;
 #[cfg(feature = "bytes_1")]
 mod bytes_1;
 
+/// Checks if two byte slices are equal in a `const` context.
+/// This is however not a *constant time* equality check, as it will return `false` as early as possible.
 pub const fn const_eq(a: &[u8], b: &[u8]) -> bool {
     if a.len() != b.len() {
         return false;
@@ -58,7 +67,7 @@ pub const fn const_eq(a: &[u8], b: &[u8]) -> bool {
     true
 }
 
-/// Helper function for `starts_with` in a `const` context.
+/// Check if a byte slice starts with another in a `const` context.
 pub const fn const_starts_with(haystack: &[u8], needle: &[u8]) -> bool {
     if haystack.len() < needle.len() {
         return false;
@@ -73,7 +82,7 @@ pub const fn const_starts_with(haystack: &[u8], needle: &[u8]) -> bool {
     true
 }
 
-/// Helper function for `ends_with` in a `const` context.
+/// Check if a byte slice ends with another in a `const` context.
 pub const fn const_ends_with(haystack: &[u8], needle: &[u8]) -> bool {
     let len = needle.len();
     if haystack.len() < len {
@@ -91,7 +100,8 @@ pub const fn const_ends_with(haystack: &[u8], needle: &[u8]) -> bool {
     true
 }
 
-/// Helper function for slicing slices in a `const` context. Can be used to replace [`slice::get`](https://doc.rust-lang.org/std/primitive.slice.html#method.get) or brackets in `b[1..4]`.
+/// Helper function for slicing slices in a `const` context.
+/// Can be used to replace [`slice::get`](https://doc.rust-lang.org/core/primitive.slice.html#method.get) or brackets (such as in `b[1..4]`).
 pub const fn const_slice(a: &'_ [u8], range: core::ops::Range<usize>) -> Option<&'_ [u8]> {
     let start = range.start;
     let end = range.end;
@@ -106,9 +116,10 @@ pub const fn const_slice(a: &'_ [u8], range: core::ops::Range<usize>) -> Option<
     }
 }
 
-/// An error that can occur when slicing a `str`.
+/// The different states that can occur when slicing a `str`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StrSliceResult<'a> {
+    /// The slicing operation resulted in a valid subslice.
     Success(&'a str),
     /// The slice would cause the result to be out of bounds of the original `str`.
     OutOfBounds,
@@ -117,6 +128,8 @@ pub enum StrSliceResult<'a> {
 }
 
 impl<'a> StrSliceResult<'a> {
+
+    /// Returns the sliced `str` if the slice was valid.
     pub const fn ok(self) -> Option<&'a str> {
         match self {
             StrSliceResult::Success(s) => Some(s),
@@ -124,6 +137,7 @@ impl<'a> StrSliceResult<'a> {
         }
     }
 
+    /// Returns the sliced `str` if the slice was valid. Otherwise panics.
     pub const fn unwrap(self) -> &'a str {
         match self {
             StrSliceResult::Success(s) => s,
@@ -131,6 +145,7 @@ impl<'a> StrSliceResult<'a> {
         }
     }
 
+    /// Returns the error if the slice was invalid.
     pub const fn err(self) -> Option<StrSliceResult<'a>> {
         match self {
             StrSliceResult::Success(_) => None,
@@ -138,16 +153,20 @@ impl<'a> StrSliceResult<'a> {
         }
     }
 
+    /// Checks if the slice was valid.
     pub const fn is_ok(&self) -> bool {
         matches!(self, StrSliceResult::Success(_))
     }
 
+    /// Checks if the slice was invalid.
     pub const fn is_err(&self) -> bool {
         !matches!(self, StrSliceResult::Success(_))
     }
+
 }
 
-/// Helper function for slicing `str`s in a `const` context. Can be used to replace [`str::get`](https://doc.rust-lang.org/std/primitive.str.html#method.get) or brackets in `s[1..4]`.
+/// Helper function for slicing `str`s in a `const` context.
+/// Can be used to replace [`str::get`](https://doc.rust-lang.org/core/primitive.str.html#method.get) or brackets (such as in `s[1..4]`).
 pub const fn const_slice_str(a: &'_ str, range: core::ops::Range<usize>) -> StrSliceResult<'_> {
     let a = a.as_bytes();
     let start = range.start;

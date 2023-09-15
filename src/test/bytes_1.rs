@@ -1,11 +1,17 @@
+
+#[cfg(feature = "alloc")]
 #[test]
 fn test_bytedata_bytes_1_static() {
     let s0: ::bytes_1::Bytes = ::bytes_1::Bytes::from_static(b"hello world");
     let s0 = crate::bytedata::ByteData::from(s0);
+    #[cfg(not(feature = "bytes_1_safe"))]
     assert!(matches!(s0, crate::bytedata::ByteData::Static(_)));
+    #[cfg(feature = "bytes_1_safe")]
+    assert!(matches!(s0, crate::bytedata::ByteData::Shared(_)));
     assert_eq!(s0, b"hello world".as_slice());
 }
 
+#[cfg(feature = "alloc")]
 #[test]
 fn test_bytedata_bytes_1_borrowed() {
     let s0: ::bytes_1::Bytes = ::bytes_1::Bytes::copy_from_slice(b"hello world");
@@ -14,6 +20,7 @@ fn test_bytedata_bytes_1_borrowed() {
     assert_eq!(s0, b"hello world".as_slice());
 }
 
+#[cfg(feature = "alloc")]
 #[test]
 fn test_bytedata_bytes_1_boxed() {
     let s0: ::bytes_1::Bytes =
@@ -23,6 +30,7 @@ fn test_bytedata_bytes_1_boxed() {
     assert_eq!(s0, b"hello world".as_slice());
 }
 
+#[cfg(feature = "alloc")]
 #[test]
 fn test_bytedata_bytes_1_vec_exact() {
     let s0: ::bytes_1::Bytes =
@@ -32,6 +40,7 @@ fn test_bytedata_bytes_1_vec_exact() {
     assert_eq!(s0, b"hello world".as_slice());
 }
 
+#[cfg(feature = "alloc")]
 #[test]
 fn test_bytedata_bytes_1_vec_extra() {
     let mut s0 = alloc::vec::Vec::with_capacity(32);

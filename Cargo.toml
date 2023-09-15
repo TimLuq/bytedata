@@ -3,7 +3,7 @@ name = "bytedata"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.70.0"
-description = "Represent a byte slice that is either static, borrowed, or shared."
+description = "Representation of a byte slice that is either static, borrowed, or shared."
 license = "MIT OR LGPL-3.0-or-later"
 repository = "https://github.com/TimLuq/bytedata/"
 authors = ["TimLuq"]
@@ -16,3 +16,9 @@ bytes_1 = { package = "bytes", version = "^1.2", optional = true }
 [features]
 default = ["macros"]
 macros = []
+alloc = []
+bytes_1_safe = ["bytes_1"]
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

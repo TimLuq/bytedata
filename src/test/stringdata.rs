@@ -1,9 +1,22 @@
-use alloc::borrow::ToOwned;
 
 use crate::StringData;
 
 #[test]
 fn test_stringdata() {
+    let s0 = StringData::from_borrowed("hello world");
+    assert_eq!(s0, "hello world");
+    assert_eq!(s0.as_str(), "hello world");
+    assert_eq!(s0.as_bytes(), b"hello world");
+    assert_eq!(s0.len(), 11);
+    assert!(!s0.is_empty());
+    assert_eq!(&s0[1..3], "el");
+}
+
+#[cfg(feature = "alloc")]
+#[test]
+fn test_stringdata_alloc() {
+    use alloc::borrow::ToOwned;
+
     let s0 = StringData::from_cow("hello world".into());
     assert_eq!(s0, "hello world");
     assert_eq!(s0.as_str(), "hello world");

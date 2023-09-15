@@ -8,6 +8,7 @@ use alloc::vec::Vec;
 use crate::SharedBytesBuilder;
 
 /// A slice of a reference-counted byte buffer.
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 pub struct SharedBytes {
     pub(crate) len: u32,
     pub(crate) off: u32,
@@ -324,9 +325,21 @@ impl PartialEq<SharedBytes> for [u8] {
     }
 }
 
+impl PartialEq<SharedBytes> for Vec<u8> {
+    fn eq(&self, other: &SharedBytes) -> bool {
+        self.as_slice() == other.as_slice()
+    }
+}
+
 impl PartialEq<[u8]> for SharedBytes {
     fn eq(&self, other: &[u8]) -> bool {
         self.as_slice() == other
+    }
+}
+
+impl PartialEq<Vec<u8>> for SharedBytes {
+    fn eq(&self, other: &Vec<u8>) -> bool {
+        self.as_slice() == other.as_slice()
     }
 }
 
@@ -340,20 +353,49 @@ impl<'b> PartialEq<&'b [u8]> for SharedBytes {
 impl Eq for SharedBytes {}
 
 impl core::hash::Hash for SharedBytes {
+    #[inline]
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
         self.as_slice().hash(state)
     }
 }
 
 impl PartialOrd for SharedBytes {
+    #[inline]
     fn partial_cmp(&self, other: &Self) -> Option<core::cmp::Ordering> {
         self.as_slice().partial_cmp(other.as_slice())
     }
 }
 
+impl PartialOrd<SharedBytes> for [u8] {
+    #[inline]
+    fn partial_cmp(&self, other: &SharedBytes) -> Option<core::cmp::Ordering> {
+        self.partial_cmp(other.as_slice())
+    }
+}
+
+impl PartialOrd<SharedBytes> for Vec<u8> {
+    #[inline]
+    fn partial_cmp(&self, other: &SharedBytes) -> Option<core::cmp::Ordering> {
+        self.as_slice().partial_cmp(other.as_slice())
+    }
+}
+
 impl PartialOrd<[u8]> for SharedBytes {
+    #[inline]
     fn partial_cmp(&self, other: &[u8]) -> Option<core::cmp::Ordering> {
         self.as_slice().partial_cmp(other)
+    }
+}
+
+impl PartialOrd<Vec<u8>> for SharedBytes {
+    fn partial_cmp(&self, other: &Vec<u8>) -> Option<core::cmp::Ordering> {
+        self.as_slice().partial_cmp(other.as_slice())
+    }
+}
+
+impl<'b> PartialOrd<&'b [u8]> for SharedBytes {
+    fn partial_cmp(&self, other: &&'b [u8]) -> Option<core::cmp::Ordering> {
+        self.as_slice().partial_cmp(*other)
     }
 }
 

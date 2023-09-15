@@ -1,6 +1,7 @@
 use crate::SharedBytes;
 
 /// A builder for `SharedBytes`.
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 pub struct SharedBytesBuilder {
     pub(crate) len: u32,
     pub(crate) off: u32,
@@ -10,6 +11,7 @@ pub struct SharedBytesBuilder {
 unsafe impl Send for SharedBytesBuilder {}
 
 impl SharedBytesBuilder {
+
     /// Creates a new `SharedBytesBuilder`.
     pub const fn new() -> Self {
         Self {
@@ -30,6 +32,7 @@ impl SharedBytesBuilder {
         }
         Self::with_capacity_u32(cap as u32)
     }
+
     fn with_capacity_u32(cap: u32) -> Self {
         let layout = alloc::alloc::Layout::from_size_align(cap as usize + 8, 4).unwrap();
         let ptr = unsafe {
@@ -177,6 +180,16 @@ impl SharedBytesBuilder {
             core::slice::from_raw_parts(self.dat.offset(self.off as isize), self.off as usize - 8)
         }
     }
+
+    /// Returns the bytes as a mut slice.
+    pub fn as_slice_mut(&mut self) -> &mut [u8] {
+        if self.off == 8 {
+            return &mut [];
+        }
+        unsafe {
+            core::slice::from_raw_parts_mut(self.dat.offset(self.off as isize), self.off as usize - 8)
+        }
+    }
 }
 
 impl Default for SharedBytesBuilder {
@@ -193,6 +206,35 @@ impl Drop for SharedBytesBuilder {
                 alloc::alloc::dealloc(self.dat, layout);
             }
         }
+    }
+}
+
+impl AsRef<[u8]> for SharedBytesBuilder {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        self.as_slice()
+    }
+}
+
+impl AsMut<[u8]> for SharedBytesBuilder {
+    #[inline]
+    fn as_mut(&mut self) -> &mut [u8] {
+        self.as_slice_mut()
+    }
+}
+
+impl core::ops::Deref for SharedBytesBuilder {
+    type Target = [u8];
+    #[inline]
+    fn deref(&self) -> &[u8] {
+        self.as_slice()
+    }
+}
+
+impl core::ops::DerefMut for SharedBytesBuilder {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut [u8] {
+        self.as_slice_mut()
     }
 }
 
