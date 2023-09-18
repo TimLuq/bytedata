@@ -51,6 +51,9 @@ pub use self::macros::*;
 #[cfg(feature = "bytes_1")]
 mod bytes_1;
 
+#[cfg(feature = "http-body_04")]
+mod http_body_04;
+
 /// Checks if two byte slices are equal in a `const` context.
 /// This is however not a *constant time* equality check, as it will return `false` as early as possible.
 pub const fn const_eq(a: &[u8], b: &[u8]) -> bool {

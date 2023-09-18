@@ -12,12 +12,15 @@ authors = ["TimLuq"]
 
 [dependencies]
 bytes_1 = { package = "bytes", version = "^1.2", optional = true }
+http-body_04 = { package = "http-body", version = "0.4.5", optional = true }
+http_02 = { package = "http", version = "0.2.4", optional = true }
 
 [features]
 default = ["macros"]
 macros = []
 alloc = []
 bytes_1_safe = ["bytes_1"]
+http-body_04 = ["dep:http-body_04", "dep:http_02", "bytes_1"]
 
 [package.metadata.docs.rs]
 all-features = true

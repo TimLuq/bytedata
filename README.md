@@ -34,3 +34,10 @@ Enables integration with the `bytes` crate (version `>=1.2, <2`) in a safe manne
 This will cause the bytes to always be cloned when converting to and from `bytes::Bytes`.
 
 For zero-copy conversion between `SharedBytes` and `bytes::Bytes`, use the `bytes_1` feature instead unless it is broken.
+
+### http-body_04
+
+Enables integration with the `http-body` crate (version `>=0.4.5, <0.5`).
+The trait `http_body::Body` is then implemented for `ByteData` and `SharedBytes` (if `alloc` feature is used).
+
+Since `http_body::Body` is the trait reexported as `hyper::HttpBody` in the `hyper` crate, this feature by extension also enables integration with `hyper`.
