@@ -1,4 +1,3 @@
-
 #[cfg(all(not(feature = "bytes_1_safe"), feature = "alloc"))]
 use core::sync::atomic::AtomicPtr;
 

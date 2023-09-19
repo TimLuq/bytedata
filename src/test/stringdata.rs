@@ -1,4 +1,3 @@
-
 use crate::StringData;
 
 #[test]

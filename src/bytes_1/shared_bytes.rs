@@ -1,4 +1,3 @@
-
 #[cfg(not(feature = "bytes_1_safe"))]
 use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
 

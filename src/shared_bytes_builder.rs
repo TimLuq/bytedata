@@ -11,7 +11,6 @@ pub struct SharedBytesBuilder {
 unsafe impl Send for SharedBytesBuilder {}
 
 impl SharedBytesBuilder {
-
     /// Creates a new `SharedBytesBuilder`.
     pub const fn new() -> Self {
         Self {
@@ -187,7 +186,10 @@ impl SharedBytesBuilder {
             return &mut [];
         }
         unsafe {
-            core::slice::from_raw_parts_mut(self.dat.offset(self.off as isize), self.off as usize - 8)
+            core::slice::from_raw_parts_mut(
+                self.dat.offset(self.off as isize),
+                self.off as usize - 8,
+            )
         }
     }
 }
@@ -259,5 +261,50 @@ impl<'a> core::iter::Extend<&'a str> for SharedBytesBuilder {
         for i in iter {
             self.extend_from_slice(i.as_bytes());
         }
+    }
+}
+
+impl core::fmt::Write for SharedBytesBuilder {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        self.extend_from_slice(s.as_bytes());
+        Ok(())
+    }
+}
+
+impl core::fmt::LowerHex for SharedBytesBuilder {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let s = self.as_slice();
+        if let Some(w) = f.width() {
+            if w > s.len() * 2 {
+                for _ in 0..w - s.len() * 2 {
+                    core::fmt::Write::write_str(f, "0")?;
+                }
+            }
+        }
+        let mut i = 0;
+        while i < s.len() {
+            write!(f, "{:02x}", s[i])?;
+            i += 1;
+        }
+        Ok(())
+    }
+}
+
+impl core::fmt::UpperHex for SharedBytesBuilder {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let s = self.as_slice();
+        if let Some(w) = f.width() {
+            if w > s.len() * 2 {
+                for _ in 0..w - s.len() * 2 {
+                    core::fmt::Write::write_str(f, "0")?;
+                }
+            }
+        }
+        let mut i = 0;
+        while i < s.len() {
+            write!(f, "{:02X}", s[i])?;
+            i += 1;
+        }
+        Ok(())
     }
 }

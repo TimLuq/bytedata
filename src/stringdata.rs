@@ -12,7 +12,7 @@ use crate::ByteData;
 use crate::SharedBytes;
 
 /// A wrapper around a [`ByteData`] that is guaranteed to be valid UTF-8.
-/// 
+///
 /// `StringData<'a>` is to `ByteData<'a>` what `&'a str` is to `&'a [u8]`.
 #[derive(Clone)]
 #[repr(transparent)]
@@ -21,7 +21,6 @@ pub struct StringData<'a> {
 }
 
 impl<'a> StringData<'a> {
-
     /// Returns an empty `StringData`.
     #[inline]
     pub const fn empty() -> Self {
@@ -45,7 +44,7 @@ impl<'a> StringData<'a> {
             data: ByteData::Borrowed(dat.as_bytes()),
         }
     }
-    
+
     #[cfg(feature = "alloc")]
     /// Creates a `StringData` from a `SharedBytes`.
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
@@ -95,7 +94,7 @@ impl<'a> StringData<'a> {
             Cow::Owned(o) => Self::from_owned(o),
         }
     }
-    
+
     #[cfg(feature = "alloc")]
     /// Creates a `StringData` from a `Cow<'static, str>`.
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
@@ -235,7 +234,7 @@ impl<'a> StringData<'a> {
             data: data.into_shared(),
         }
     }
-    
+
     #[cfg(feature = "alloc")]
     /// Transform any borrowed data into shared data of a specific range. This is useful when you wish to change the lifetime of the data.
     ///
@@ -252,7 +251,6 @@ impl<'a> StringData<'a> {
             data: data.into_shared_range(range),
         }
     }
-
 }
 
 impl AsRef<[u8]> for StringData<'_> {
@@ -499,6 +497,6 @@ impl Ord for StringData<'_> {
 impl core::fmt::Debug for StringData<'_> {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        self.as_str().fmt(f)
+        core::fmt::Debug::fmt(self.as_str(), f)
     }
 }

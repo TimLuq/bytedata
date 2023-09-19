@@ -1,4 +1,3 @@
-
 #[cfg(feature = "alloc")]
 #[test]
 fn test_bytedata_bytes_1_static() {

@@ -11,16 +11,18 @@ authors = ["TimLuq"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bytes_1 = { package = "bytes", version = "^1.2", optional = true }
+bytes_1 = { package = "bytes", version = "^1.2", optional = true, default-features = false }
 http-body_04 = { package = "http-body", version = "0.4.5", optional = true }
 http_02 = { package = "http", version = "0.2.4", optional = true }
+serde_1 = { package = "serde", version = "1.0.0", optional = true, default-features = false }
 
 [features]
 default = ["macros"]
 macros = []
-alloc = []
+alloc = ["serde_1?/alloc"]
 bytes_1_safe = ["bytes_1"]
 http-body_04 = ["dep:http-body_04", "dep:http_02", "bytes_1"]
+std = ["alloc"]
 
 [package.metadata.docs.rs]
 all-features = true

@@ -10,7 +10,7 @@ use alloc::{borrow::Cow, vec::Vec};
 use crate::SharedBytes;
 
 /// A container of bytes that can be either static, borrowed, or shared.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 #[non_exhaustive]
 pub enum ByteData<'a> {
     /// A static byte slice.
@@ -24,7 +24,6 @@ pub enum ByteData<'a> {
 }
 
 impl<'a> ByteData<'a> {
-
     /// Returns an empty `ByteData`.
     #[inline]
     pub const fn empty() -> Self {
@@ -184,7 +183,7 @@ impl<'a> ByteData<'a> {
             Self::Shared(dat) => ByteData::Shared(dat),
         }
     }
-    
+
     #[cfg(feature = "alloc")]
     /// Transform any borrowed data into shared data of a specific range. This is useful when you wish to change the lifetime of the data.
     ///
@@ -362,5 +361,49 @@ impl Ord for ByteData<'_> {
     #[inline]
     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
         self.as_slice().cmp(other.as_slice())
+    }
+}
+
+impl core::fmt::Debug for ByteData<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Debug::fmt(&self.as_slice(), f)
+    }
+}
+
+impl core::fmt::LowerHex for ByteData<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let s = self.as_slice();
+        if let Some(w) = f.width() {
+            if w > s.len() * 2 {
+                for _ in 0..w - s.len() * 2 {
+                    core::fmt::Write::write_str(f, "0")?;
+                }
+            }
+        }
+        let mut i = 0;
+        while i < s.len() {
+            write!(f, "{:02x}", s[i])?;
+            i += 1;
+        }
+        Ok(())
+    }
+}
+
+impl core::fmt::UpperHex for ByteData<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let s = self.as_slice();
+        if let Some(w) = f.width() {
+            if w > s.len() * 2 {
+                for _ in 0..w - s.len() * 2 {
+                    core::fmt::Write::write_str(f, "0")?;
+                }
+            }
+        }
+        let mut i = 0;
+        while i < s.len() {
+            write!(f, "{:02X}", s[i])?;
+            i += 1;
+        }
+        Ok(())
     }
 }

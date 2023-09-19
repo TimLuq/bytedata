@@ -18,7 +18,7 @@
 //! assert_eq!(STATIC.as_slice(), BORROWED.as_slice());
 //! # }
 
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![deny(missing_docs)]
 
@@ -43,6 +43,9 @@ pub use self::shared_bytes_builder::*;
 mod stringdata;
 pub use self::stringdata::*;
 
+#[cfg(feature = "std")]
+mod std;
+
 #[cfg(feature = "macros")]
 mod macros;
 #[cfg(feature = "macros")]
@@ -53,6 +56,9 @@ mod bytes_1;
 
 #[cfg(feature = "http-body_04")]
 mod http_body_04;
+
+#[cfg(feature = "serde_1")]
+mod serde_1;
 
 /// Checks if two byte slices are equal in a `const` context.
 /// This is however not a *constant time* equality check, as it will return `false` as early as possible.
@@ -131,7 +137,6 @@ pub enum StrSliceResult<'a> {
 }
 
 impl<'a> StrSliceResult<'a> {
-
     /// Returns the sliced `str` if the slice was valid.
     pub const fn ok(self) -> Option<&'a str> {
         match self {
@@ -165,7 +170,6 @@ impl<'a> StrSliceResult<'a> {
     pub const fn is_err(&self) -> bool {
         !matches!(self, StrSliceResult::Success(_))
     }
-
 }
 
 /// Helper function for slicing `str`s in a `const` context.
