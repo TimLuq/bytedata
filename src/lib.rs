@@ -278,7 +278,7 @@ pub const fn const_split_once_bytes<'a>(
 
 /// Helper function to split a constant str of bytes on a specific substring.
 /// The matching substring will still be there in the second string.
-pub const fn const_split_once_str<'a, const N: usize>(
+pub const fn const_split_once_str<'a>(
     haystack: &'a str,
     needle: &'_ str,
 ) -> Option<(&'a str, &'a str)> {
