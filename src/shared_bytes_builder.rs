@@ -161,11 +161,13 @@ impl SharedBytesBuilder {
     }
 
     /// Returns the number of bytes currently in the buffer.
+    #[inline]
     pub const fn len(&self) -> usize {
         self.off as usize - 8
     }
 
     /// Returns `true` if the buffer is empty.
+    #[inline]
     pub const fn is_empty(&self) -> bool {
         self.off == 8
     }
@@ -176,7 +178,7 @@ impl SharedBytesBuilder {
             return &[];
         }
         unsafe {
-            core::slice::from_raw_parts(self.dat.offset(self.off as isize), self.off as usize - 8)
+            core::slice::from_raw_parts(self.dat.offset(8), self.off as usize - 8)
         }
     }
 
@@ -187,10 +189,33 @@ impl SharedBytesBuilder {
         }
         unsafe {
             core::slice::from_raw_parts_mut(
-                self.dat.offset(self.off as isize),
+                self.dat.offset(8),
                 self.off as usize - 8,
             )
         }
+    }
+
+    /// Apply a function to the unused reserved bytes.
+    ///
+    /// The function is passed a mutable slice of `MaybeUninit<u8>` and returns a tuple of the return value and the number of bytes filled.
+    pub fn apply_unfilled<R, F>(&mut self, f: F) -> R
+    where F: FnOnce(&mut [core::mem::MaybeUninit<u8>]) -> (R, usize),
+    {
+        let off = self.off as isize;
+        let data = if off == 8 {
+            &mut [] as &mut [core::mem::MaybeUninit<u8>]
+        } else {
+            unsafe {
+                core::slice::from_raw_parts_mut(
+                    self.dat.offset(off) as *mut core::mem::MaybeUninit<u8>,
+                    self.len as usize - off as usize,
+                )
+            }
+        };
+        let (ret, len) = f(data);
+        assert!(len <= data.len());
+        self.len += len as u32;
+        ret
     }
 }
 
@@ -306,5 +331,26 @@ impl core::fmt::UpperHex for SharedBytesBuilder {
             i += 1;
         }
         Ok(())
+    }
+}
+
+#[cfg(feature = "read_buf")]
+impl SharedBytesBuilder {
+    /// Apply a function to the unused reserved bytes.
+    pub fn apply_borrowed_buf<'this, R, F>(&'this mut self, f: F) -> R 
+    where F: FnOnce(&mut std::io::BorrowedBuf<'this>) -> R,
+    {
+        let off = self.off as isize;
+        let mut bb = if off == 8 {
+            std::io::BorrowedBuf::from(&mut [] as &mut [u8])
+        } else {
+            let data = unsafe { self.dat.offset(off) as *mut core::mem::MaybeUninit<u8> };
+            let data = unsafe { core::slice::from_raw_parts_mut(data, self.len as usize - off as usize) };
+            std::io::BorrowedBuf::from(data)
+        };
+        let ret = f(&mut bb);
+        let len = bb.len() as u32;
+        self.len += len;
+        ret
     }
 }

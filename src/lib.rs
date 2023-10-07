@@ -20,6 +20,7 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(all(feature = "nightly", feature = "read_buf"), feature(read_buf))]
 #![deny(missing_docs)]
 
 #[cfg(feature = "alloc")]

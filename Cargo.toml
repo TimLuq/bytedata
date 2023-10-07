@@ -23,6 +23,8 @@ alloc = ["serde_1?/alloc"]
 bytes_1_safe = ["bytes_1"]
 http-body_04 = ["dep:http-body_04", "dep:http_02", "bytes_1"]
 std = ["alloc"]
+nightly = []
+read_buf = ["std"]
 
 [package.metadata.docs.rs]
 all-features = true
