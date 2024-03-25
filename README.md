@@ -12,6 +12,11 @@ The `SharedBytes` type is then also added as one additional representation of `B
 Enables runtime allocation of byte arrays on the heap.
 This allows for dynamic allocation of byte arrays which are exposed as `SharedBytes` and can be wrapped as `ByteData::Shared(_)`.
 
+### chunk
+
+Enables runtime representation of small byte arrays inline as `ByteData::Chunk(_)`.
+This allows for optimized storage of small byte arrays that are less than or equal to 12 bytes in size.
+
 ### macros
 
 Exposes the `concat_bytes_static!` and `concat_str_static!` macros.
@@ -41,3 +46,8 @@ Enables integration with the `http-body` crate (version `>=0.4.5, <0.5`).
 The trait `http_body::Body` is then implemented for `ByteData` and `SharedBytes` (if `alloc` feature is used).
 
 Since `http_body::Body` is the trait reexported as `hyper::HttpBody` in the `hyper` crate, this feature by extension also enables integration with `hyper`.
+
+### http-body_1
+
+Enables integration with the `http-body` crate (version `>=1.0.0, <2`).
+The trait `http_body::Body` is then implemented for `ByteData` and `SharedBytes` (if `alloc` feature is used).

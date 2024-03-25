@@ -8,6 +8,8 @@ impl From<ByteData<'_>> for bytes::Bytes {
         match dat {
             ByteData::Static(dat) => bytes::Bytes::from_static(dat),
             ByteData::Borrowed(dat) => bytes::Bytes::copy_from_slice(dat),
+            #[cfg(feature = "chunk")]
+            ByteData::Chunk(dat) => bytes::Bytes::copy_from_slice(dat.as_slice()),
             #[cfg(feature = "alloc")]
             ByteData::Shared(dat) => dat.into(),
         }

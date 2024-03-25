@@ -123,6 +123,8 @@ impl<'a> StringData<'a> {
         match &self.data {
             ByteData::Static(dat) => dat.len(),
             ByteData::Borrowed(dat) => dat.len(),
+            #[cfg(feature = "chunk")]
+            ByteData::Chunk(dat) => dat.len(),
             #[cfg(feature = "alloc")]
             ByteData::Shared(dat) => dat.len(),
         }

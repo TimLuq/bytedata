@@ -17,6 +17,10 @@ pub enum ByteData<'a> {
     Static(&'static [u8]),
     /// A borrowed byte slice.
     Borrowed(&'a [u8]),
+    #[cfg(feature = "chunk")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "chunk")))]
+    /// A chunk of bytes that is 12 bytes or less.
+    Chunk(crate::byte_chunk::ByteChunk),
     #[cfg(feature = "alloc")]
     /// A shared byte slice.
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
@@ -34,6 +38,30 @@ impl<'a> ByteData<'a> {
     #[inline]
     pub const fn from_static(dat: &'static [u8]) -> Self {
         Self::Static(dat)
+    }
+
+    #[cfg(feature = "chunk")]
+    /// Creates a `ByteData` from a slice of bytes. The slice must be 12 bytes or less. If the slice is larger, this will panic.
+    #[cfg_attr(docsrs, doc(cfg(feature = "chunk")))]
+    #[inline]
+    pub const fn from_chunk_slice(dat: &[u8]) -> Self {
+        Self::Chunk(crate::byte_chunk::ByteChunk::from_slice(dat))
+    }
+
+    #[cfg(feature = "chunk")]
+    /// Creates a `ByteData` from a single byte.
+    #[cfg_attr(docsrs, doc(cfg(feature = "chunk")))]
+    #[inline]
+    pub const fn from_byte(b0: u8) -> Self {
+        Self::Chunk(crate::byte_chunk::ByteChunk::from_byte(b0))
+    }
+
+    #[cfg(feature = "chunk")]
+    /// Creates a `ByteData` from an array of bytes. The array must be 12 bytes or less. If the array is larger, this will panic.
+    #[cfg_attr(docsrs, doc(cfg(feature = "chunk")))]
+    #[inline]
+    pub const fn from_chunk<const L: usize>(dat: &[u8; L]) -> Self {
+        Self::Chunk(crate::byte_chunk::ByteChunk::from_array(&dat))
     }
 
     /// Creates a `ByteData` from a borrowed slice of bytes.
@@ -55,6 +83,10 @@ impl<'a> ByteData<'a> {
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     #[inline]
     pub fn from_owned(dat: Vec<u8>) -> Self {
+        #[cfg(feature = "chunk")]
+        if dat.len() <= 12 {
+            return Self::Chunk(crate::byte_chunk::ByteChunk::from_slice(&dat));
+        }
         Self::Shared(dat.into())
     }
 
@@ -83,6 +115,8 @@ impl<'a> ByteData<'a> {
         match self {
             Self::Static(dat) => dat,
             Self::Borrowed(dat) => dat,
+            #[cfg(feature = "chunk")]
+            Self::Chunk(dat) => dat.as_slice(),
             #[cfg(feature = "alloc")]
             Self::Shared(dat) => dat.as_slice(),
         }
@@ -93,6 +127,8 @@ impl<'a> ByteData<'a> {
         match self {
             Self::Static(dat) => dat.len(),
             Self::Borrowed(dat) => dat.len(),
+            #[cfg(feature = "chunk")]
+            Self::Chunk(dat) => dat.len(),
             #[cfg(feature = "alloc")]
             Self::Shared(dat) => dat.len(),
         }
@@ -103,6 +139,8 @@ impl<'a> ByteData<'a> {
         match self {
             Self::Static(dat) => dat.is_empty(),
             Self::Borrowed(dat) => dat.is_empty(),
+            #[cfg(feature = "chunk")]
+            Self::Chunk(dat) => dat.is_empty(),
             #[cfg(feature = "alloc")]
             Self::Shared(dat) => dat.is_empty(),
         }
@@ -140,6 +178,8 @@ impl<'a> ByteData<'a> {
         match self {
             Self::Static(dat) => Self::Static(&dat[range]),
             Self::Borrowed(dat) => Self::Borrowed(&dat[range]),
+            #[cfg(feature = "chunk")]
+            Self::Chunk(dat) => Self::Chunk(dat.sliced(range)),
             #[cfg(feature = "alloc")]
             Self::Shared(dat) => Self::Shared(dat.sliced_range(range)),
         }
@@ -153,6 +193,8 @@ impl<'a> ByteData<'a> {
         match self {
             Self::Static(dat) => Self::Static(&dat[range]),
             Self::Borrowed(dat) => Self::Borrowed(&dat[range]),
+            #[cfg(feature = "chunk")]
+            Self::Chunk(dat) => Self::Chunk(dat.sliced(range)),
             #[cfg(feature = "alloc")]
             Self::Shared(dat) => Self::Shared(dat.into_sliced_range(range)),
         }
@@ -166,6 +208,8 @@ impl<'a> ByteData<'a> {
         match self {
             Self::Static(dat) => *dat = &dat[range],
             Self::Borrowed(dat) => *dat = &dat[range],
+            #[cfg(feature = "chunk")]
+            Self::Chunk(dat) => dat.make_sliced(range),
             #[cfg(feature = "alloc")]
             Self::Shared(dat) => {
                 dat.make_sliced_range(range);
@@ -178,8 +222,14 @@ impl<'a> ByteData<'a> {
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     pub fn into_shared<'s>(self) -> ByteData<'s> {
         match self {
+            #[cfg(feature = "chunk")]
+            Self::Borrowed(dat) if dat.len() <= 12 => {
+                ByteData::Chunk(crate::byte_chunk::ByteChunk::from_slice(dat))
+            }
             Self::Borrowed(dat) => ByteData::Shared(SharedBytes::from_slice(dat)),
             Self::Static(dat) => ByteData::Static(dat),
+            #[cfg(feature = "chunk")]
+            Self::Chunk(dat) => ByteData::Chunk(dat),
             Self::Shared(dat) => ByteData::Shared(dat),
         }
     }
@@ -194,9 +244,18 @@ impl<'a> ByteData<'a> {
         range: R,
     ) -> ByteData<'s> {
         match self {
-            Self::Borrowed(dat) => ByteData::Shared(SharedBytes::from_slice(&dat[range])),
+            Self::Borrowed(dat) => {
+                let dat = &dat[range];
+                #[cfg(feature = "chunk")]
+                if dat.len() <= 12 {
+                    return ByteData::Chunk(crate::byte_chunk::ByteChunk::from_slice(dat));
+                }
+                ByteData::Shared(SharedBytes::from_slice(dat))
+            }
             Self::Shared(dat) => ByteData::Shared(dat.into_sliced_range(range)),
             Self::Static(dat) => ByteData::Static(&dat[range]),
+            #[cfg(feature = "chunk")]
+            Self::Chunk(dat) => ByteData::Chunk(dat.into_sliced(range)),
         }
     }
 }
@@ -210,6 +269,8 @@ impl ByteData<'static> {
             Self::Borrowed(dat) => ByteData::Static(dat),
             #[cfg(feature = "alloc")]
             Self::Shared(dat) => ByteData::Shared(dat),
+            #[cfg(feature = "chunk")]
+            Self::Chunk(dat) => ByteData::Chunk(dat),
         }
     }
 }

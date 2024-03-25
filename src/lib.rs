@@ -52,11 +52,19 @@ mod macros;
 #[cfg(feature = "macros")]
 pub use self::macros::*;
 
+#[cfg(feature = "chunk")]
+mod byte_chunk;
+#[cfg(feature = "chunk")]
+pub use byte_chunk::ByteChunk;
+
 #[cfg(feature = "bytes_1")]
 mod bytes_1;
 
 #[cfg(feature = "http-body_04")]
 mod http_body_04;
+
+#[cfg(feature = "http-body_1")]
+mod http_body_1;
 
 #[cfg(feature = "serde_1")]
 mod serde_1;

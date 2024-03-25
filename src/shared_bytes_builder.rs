@@ -177,9 +177,7 @@ impl SharedBytesBuilder {
         if self.off == 8 {
             return &[];
         }
-        unsafe {
-            core::slice::from_raw_parts(self.dat.offset(8), self.off as usize - 8)
-        }
+        unsafe { core::slice::from_raw_parts(self.dat.offset(8), self.off as usize - 8) }
     }
 
     /// Returns the bytes as a mut slice.
@@ -187,19 +185,15 @@ impl SharedBytesBuilder {
         if self.off == 8 {
             return &mut [];
         }
-        unsafe {
-            core::slice::from_raw_parts_mut(
-                self.dat.offset(8),
-                self.off as usize - 8,
-            )
-        }
+        unsafe { core::slice::from_raw_parts_mut(self.dat.offset(8), self.off as usize - 8) }
     }
 
     /// Apply a function to the unused reserved bytes.
     ///
     /// The function is passed a mutable slice of `MaybeUninit<u8>` and returns a tuple of the return value and the number of bytes filled.
     pub fn apply_unfilled<R, F>(&mut self, f: F) -> R
-    where F: FnOnce(&mut [core::mem::MaybeUninit<u8>]) -> (R, usize),
+    where
+        F: FnOnce(&mut [core::mem::MaybeUninit<u8>]) -> (R, usize),
     {
         let off = self.off as isize;
         let data = if off == 8 {
@@ -337,15 +331,17 @@ impl core::fmt::UpperHex for SharedBytesBuilder {
 #[cfg(feature = "read_buf")]
 impl SharedBytesBuilder {
     /// Apply a function to the unused reserved bytes.
-    pub fn apply_borrowed_buf<'this, R, F>(&'this mut self, f: F) -> R 
-    where F: FnOnce(&mut std::io::BorrowedBuf<'this>) -> R,
+    pub fn apply_borrowed_buf<'this, R, F>(&'this mut self, f: F) -> R
+    where
+        F: FnOnce(&mut std::io::BorrowedBuf<'this>) -> R,
     {
         let off = self.off as isize;
         let mut bb = if off == 8 {
             std::io::BorrowedBuf::from(&mut [] as &mut [u8])
         } else {
             let data = unsafe { self.dat.offset(off) as *mut core::mem::MaybeUninit<u8> };
-            let data = unsafe { core::slice::from_raw_parts_mut(data, self.len as usize - off as usize) };
+            let data =
+                unsafe { core::slice::from_raw_parts_mut(data, self.len as usize - off as usize) };
             std::io::BorrowedBuf::from(data)
         };
         let ret = f(&mut bb);

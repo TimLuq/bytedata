@@ -28,10 +28,14 @@ impl<'de> serde::de::Deserialize<'de> for ByteData<'de> {
                 Ok(ByteData::from_borrowed(v))
             }
 
-            fn visit_bytes<E: serde::de::Error>(self, _v: &[u8]) -> Result<Self::Value, E> {
+            fn visit_bytes<E: serde::de::Error>(self, v: &[u8]) -> Result<Self::Value, E> {
+                #[cfg(feature = "chunk")]
+                if v.len() <= 12 {
+                    return Ok(ByteData::from_chunk_slice(v));
+                }
                 #[cfg(feature = "alloc")]
                 {
-                    Ok(ByteData::from_shared(_v.into()))
+                    Ok(ByteData::from_shared(v.into()))
                 }
                 #[cfg(not(feature = "alloc"))]
                 {
