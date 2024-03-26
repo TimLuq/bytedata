@@ -31,6 +31,9 @@ use core::panic;
 
 pub use self::bytedata::*;
 
+mod byte_string_render;
+pub use byte_string_render::*;
+
 #[cfg(feature = "alloc")]
 mod shared_bytes;
 #[cfg(feature = "alloc")]
@@ -50,6 +53,7 @@ mod std;
 #[cfg(feature = "macros")]
 mod macros;
 #[cfg(feature = "macros")]
+#[allow(unused_imports)]
 pub use self::macros::*;
 
 #[cfg(feature = "chunk")]

@@ -1,0 +1,94 @@
+/// Helper wrapper to render a byte slice as a bytestring similar to [`core::ascii::escape_default`].
+/// 
+/// ```ignore
+/// format!("{}", ByteStringRender::from_slice(b"Hello,\nWorld!"));
+/// // => "Hello,\\nWorld!"
+/// format!("{:?}", ByteStringRender::from_slice(b"Hello,\nWorld!"));
+/// // => "b\"Hello,\\nWorld!\""
+/// ```
+#[repr(transparent)]
+pub struct ByteStringRender<'a>(&'a [u8]);
+
+impl<'a> ByteStringRender<'a> {
+    /// Get the inner byte slice.
+    #[inline]
+    pub const fn as_slice(&self) -> &'a [u8] {
+        self.0
+    }
+
+    /// Create a new `ByteStringRender` from a byte slice.
+    pub const fn from_slice(slice: &'a [u8]) -> Self {
+        Self(slice)
+    }
+
+    /// Create a new `ByteStringRender` from a string slice.
+    pub const fn from_str(slice: &'a str) -> Self {
+        Self(slice.as_bytes())
+    }
+
+    /// Create a new `ByteStringRender` from a byte slice reference.
+    #[inline]
+    pub fn from_ref(slice: &'a impl AsRef<[u8]>) -> Self {
+        Self(slice.as_ref())
+    }
+}
+
+impl<'a> From<&'a [u8]> for ByteStringRender<'a> {
+    #[inline]
+    fn from(value: &'a [u8]) -> Self {
+        Self(value)
+    }
+}
+
+impl<'a> From<&'a str> for ByteStringRender<'a> {
+    #[inline]
+    fn from(value: &'a str) -> Self {
+        Self(value.as_bytes())
+    }
+}
+
+impl<'a> core::fmt::Debug for ByteStringRender<'a> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("b\"")?;
+        core::fmt::Display::fmt(self, f)?;
+        f.write_str("\"")
+    }
+}
+
+impl<'a> core::fmt::Display for ByteStringRender<'a> {
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        for &b in self.0 {
+            match b {
+                b'\\' => f.write_str("\\\\")?,
+                b'"' => f.write_str("\\\"")?,
+                b'\n' => f.write_str("\\n")?,
+                b'\r' => f.write_str("\\r")?,
+                b'\t' => f.write_str("\\t")?,
+                b if b >= 32 && b < 127 => f.write_str(unsafe { core::str::from_utf8_unchecked(&[b]) })?,
+                b => f.write_fmt(format_args!("\\x{:02x}", b))?,
+            }
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[cfg(feature = "alloc")]
+    #[test]
+    fn test_byte_string_render() {
+        let data = b"Hello, World!";
+        let rendered = ByteStringRender::from_slice(data);
+        assert_eq!(alloc::format!("{}", &rendered), r#"Hello, World!"#);
+        assert_eq!(alloc::format!("{:?}", &rendered), r#"b"Hello, World!""#);
+
+        let data = b"Hello, \nWorld!";
+        let rendered = ByteStringRender::from_slice(data);
+        assert_eq!(alloc::format!("{}", &rendered), r#"Hello, \nWorld!"#);
+        assert_eq!(alloc::format!("{:?}", &rendered), r#"b"Hello, \nWorld!""#);
+    }
+}
+
