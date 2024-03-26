@@ -285,6 +285,7 @@ pub const fn const_split_once_bytes<'a>(
             return None;
         }
         let a = unsafe { core::slice::from_raw_parts(haystack.as_ptr(), p) };
+        let hs = unsafe { core::slice::from_raw_parts(haystack.as_ptr().add(p), haystack.len() - p) };
         return Some((a, hs));
     }
 }
