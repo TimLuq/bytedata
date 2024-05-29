@@ -9,6 +9,8 @@ use ::bytes_1 as bytes;
 
 mod bytedata;
 
+#[cfg(feature = "queue")]
+mod queue;
 #[cfg(feature = "alloc")]
 mod shared_bytes;
 #[cfg(feature = "alloc")]

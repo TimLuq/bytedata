@@ -1,5 +1,5 @@
 /// Helper wrapper to render a byte slice as a bytestring similar to [`core::ascii::escape_default`].
-/// 
+///
 /// ```ignore
 /// format!("{}", ByteStringRender::from_slice(b"Hello,\nWorld!"));
 /// // => "Hello,\\nWorld!"
@@ -65,7 +65,9 @@ impl<'a> core::fmt::Display for ByteStringRender<'a> {
                 b'\n' => f.write_str("\\n")?,
                 b'\r' => f.write_str("\\r")?,
                 b'\t' => f.write_str("\\t")?,
-                b if b >= 32 && b < 127 => f.write_str(unsafe { core::str::from_utf8_unchecked(&[b]) })?,
+                b if b >= 32 && b < 127 => {
+                    f.write_str(unsafe { core::str::from_utf8_unchecked(&[b]) })?
+                }
                 b => f.write_fmt(format_args!("\\x{:02x}", b))?,
             }
         }
@@ -73,11 +75,62 @@ impl<'a> core::fmt::Display for ByteStringRender<'a> {
     }
 }
 
+/// Helper wrapper to render a byte slice as a bytestring similar to [`core::ascii::escape_default`].
+///
+/// ```ignore
+/// format!("{}", ByteStringRender::from_slice(b"Hello,\nWorld!"));
+/// // => "Hello,\\nWorld!"
+/// format!("{:?}", ByteStringRender::from_slice(b"Hello,\nWorld!"));
+/// // => "b\"Hello,\\nWorld!\""
+/// ```
+pub struct MultiByteStringRender<'a, T, R> {
+    inner: &'a T,
+    _phantom: core::marker::PhantomData<R>,
+}
+
+impl<'a, T, R: AsRef<[u8]>> MultiByteStringRender<'a, T, R>
+where
+    &'a T: IntoIterator<Item = R>,
+{
+    /// Create a new `ByteStringRender` from a byte slice.
+    pub const fn new(inner: &'a T) -> Self {
+        Self {
+            inner,
+            _phantom: core::marker::PhantomData,
+        }
+    }
+}
+
+impl<'a, T, R: AsRef<[u8]>> core::fmt::Debug for MultiByteStringRender<'a, T, R>
+where
+    &'a T: IntoIterator<Item = R>,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str("b\"")?;
+        core::fmt::Display::fmt(self, f)?;
+        f.write_str("\"")
+    }
+}
+
+impl<'a, T, R: AsRef<[u8]>> core::fmt::Display for MultiByteStringRender<'a, T, R>
+where
+    &'a T: IntoIterator<Item = R>,
+{
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        for b in self.inner.into_iter() {
+            let r = ByteStringRender::from_slice(b.as_ref());
+            core::fmt::Display::fmt(&r, f)?;
+        }
+        Ok(())
+    }
+}
+
 #[cfg(test)]
+#[cfg(feature = "alloc")]
 mod tests {
     use super::*;
 
-    #[cfg(feature = "alloc")]
     #[test]
     fn test_byte_string_render() {
         let data = b"Hello, World!";
@@ -91,4 +144,3 @@ mod tests {
         assert_eq!(alloc::format!("{:?}", &rendered), r#"b"Hello, \nWorld!""#);
     }
 }
-

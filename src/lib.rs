@@ -61,6 +61,11 @@ mod byte_chunk;
 #[cfg(feature = "chunk")]
 pub use byte_chunk::ByteChunk;
 
+#[cfg(feature = "queue")]
+mod queue;
+#[cfg(feature = "queue")]
+pub use queue::ByteQueue;
+
 #[cfg(feature = "bytes_1")]
 mod bytes_1;
 
@@ -285,7 +290,8 @@ pub const fn const_split_once_bytes<'a>(
             return None;
         }
         let a = unsafe { core::slice::from_raw_parts(haystack.as_ptr(), p) };
-        let hs = unsafe { core::slice::from_raw_parts(haystack.as_ptr().add(p), haystack.len() - p) };
+        let hs =
+            unsafe { core::slice::from_raw_parts(haystack.as_ptr().add(p), haystack.len() - p) };
         return Some((a, hs));
     }
 }

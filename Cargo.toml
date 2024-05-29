@@ -1,6 +1,6 @@
 [package]
 name = "bytedata"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 rust-version = "1.70.0"
 description = "Representation of a byte slice that is either static, borrowed, or shared."
@@ -29,6 +29,7 @@ http-body_1 = ["dep:http-body_1", "dep:http_1", "bytes_1"]
 std = ["alloc"]
 nightly = []
 read_buf = ["std"]
+queue = []
 
 [package.metadata.docs.rs]
 all-features = true
