@@ -51,3 +51,8 @@ Since `http_body::Body` is the trait reexported as `hyper::HttpBody` in the `hyp
 
 Enables integration with the `http-body` crate (version `>=1.0.0, <2`).
 The trait `http_body::Body` is then implemented for `ByteData` and `SharedBytes` (if `alloc` feature is used).
+
+### queue
+
+Enables the `ByteQueue` type which is a queue of `ByteData` objects that can be pushed to and popped from.
+Unless the `alloc` feature is enabled, the queue will be limited to a maximum size of 8 elements.

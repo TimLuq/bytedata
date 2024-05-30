@@ -140,6 +140,12 @@ pub(crate) struct LinkedRoot<'a> {
     count: usize,
 }
 
+#[cfg(feature = "alloc")]
+unsafe impl Send for LinkedRoot<'_> {}
+
+#[cfg(feature = "alloc")]
+unsafe impl Sync for LinkedRoot<'_> {}
+
 #[cfg(not(feature = "alloc"))]
 #[allow(private_interfaces)]
 struct LinkedRoot<'a> {
@@ -163,16 +169,23 @@ impl<'a> LinkedRoot<'a> {
             data: LinkedNodeData::new(),
         }
     }
+    #[inline]
+    fn with_item(item: crate::ByteData<'a>) -> Self {
+        // TODO: make const
+        let mut me = Self::new();
+        me.push_back(item);
+        me
+    }
 
     #[cfg(feature = "alloc")]
     #[inline]
-    fn len(&self) -> usize {
+    const fn len(&self) -> usize {
         self.count
     }
 
     #[cfg(not(feature = "alloc"))]
     #[inline]
-    fn len(&self) -> usize {
+    const fn len(&self) -> usize {
         self.data.len as usize
     }
 
@@ -566,6 +579,29 @@ impl<'a> ByteQueue<'a> {
         }
     }
 
+    fn with_item(data: ByteData<'a>) -> Self {
+        let remain = data.len();
+        // TODO: make const
+        Self {
+            queue: LinkedRoot::with_item(data),
+            remain,
+        }
+    }
+
+    #[cfg(feature = "alloc")]
+    /// Checks if the queue is full. When the feature `alloc` is enabled, this will always return `false`.
+    #[inline]
+    pub const fn is_full(&self) -> bool {
+        false
+    }
+
+    #[cfg(not(feature = "alloc"))]
+    /// Checks if the queue is full. When the feature `alloc` is enabled, this will always return `false`.
+    #[inline]
+    pub const fn is_full(&self) -> bool {
+        self.queue.len() == self.queue.data.data.len()
+    }
+
     /// Append bytes to the queue.
     pub fn push_back(&mut self, data: impl Into<ByteData<'a>>) {
         let data = data.into();
@@ -712,17 +748,13 @@ impl<'a> ByteQueue<'a> {
 
 impl<'a> From<ByteData<'a>> for ByteQueue<'a> {
     fn from(data: ByteData<'a>) -> Self {
-        let mut queue = Self::new();
-        queue.push_back(data);
-        queue
+        Self::with_item(data)
     }
 }
 
 impl<'a> From<&'a [u8]> for ByteQueue<'a> {
     fn from(data: &'a [u8]) -> Self {
-        let mut queue = Self::new();
-        queue.push_back(data);
-        queue
+        Self::with_item(data.into())
     }
 }
 
@@ -731,9 +763,16 @@ impl<'a> From<&'a [u8]> for ByteQueue<'a> {
 #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl<'a> From<alloc::vec::Vec<u8>> for ByteQueue<'a> {
     fn from(data: alloc::vec::Vec<u8>) -> Self {
-        let mut queue = Self::new();
-        queue.push_back(data);
-        queue
+        Self::with_item(data.into())
+    }
+}
+
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "queue")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+impl<'a> From<alloc::string::String> for ByteQueue<'a> {
+    fn from(data: alloc::string::String) -> Self {
+        Self::with_item(data.into())
     }
 }
 
