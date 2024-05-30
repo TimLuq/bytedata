@@ -72,8 +72,15 @@ impl<'a> StringData<'a> {
     /// The data must be valid UTF-8.
     /// Otherwise, the behavior is undefined for any context using the value.
     /// Prefer [`try_from_bytedata`] if you are unsure.
+    #[inline]
     pub const unsafe fn from_bytedata_unchecked(dat: ByteData<'a>) -> Self {
         StringData { data: dat }
+    }
+
+    /// Returns the underlying [`ByteData`].
+    #[inline]
+    pub const fn into_bytedata(self) -> ByteData<'a> {
+        unsafe { core::mem::transmute(self) }
     }
 
     #[cfg(feature = "alloc")]
@@ -274,6 +281,13 @@ impl<'a> From<&'a str> for StringData<'a> {
     #[inline]
     fn from(dat: &'a str) -> Self {
         Self::from_borrowed(dat)
+    }
+}
+
+impl<'a> From<StringData<'a>> for ByteData<'a> {
+    #[inline]
+    fn from(dat: StringData<'a>) -> Self {
+        dat.into_bytedata()
     }
 }
 
