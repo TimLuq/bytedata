@@ -275,6 +275,13 @@ impl From<Vec<u8>> for SharedBytes {
     }
 }
 
+impl From<alloc::string::String> for SharedBytes {
+    #[inline]
+    fn from(dat: alloc::string::String) -> Self {
+        Self::from_slice(dat.as_bytes())
+    }
+}
+
 impl Index<usize> for SharedBytes {
     type Output = u8;
     fn index(&self, idx: usize) -> &Self::Output {

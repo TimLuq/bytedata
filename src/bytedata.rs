@@ -313,6 +313,14 @@ impl<'a> From<Vec<u8>> for ByteData<'a> {
     }
 }
 
+#[cfg(feature = "alloc")]
+impl<'a> From<alloc::string::String> for ByteData<'a> {
+    #[inline]
+    fn from(dat: alloc::string::String) -> Self {
+        Self::from_shared(dat.into())
+    }
+}
+
 impl Index<usize> for ByteData<'_> {
     type Output = u8;
     fn index(&self, idx: usize) -> &Self::Output {
