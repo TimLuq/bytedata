@@ -776,6 +776,48 @@ impl<'a> From<alloc::string::String> for ByteQueue<'a> {
     }
 }
 
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "queue")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+impl<'a> From<alloc::borrow::Cow<'a, [u8]>> for ByteQueue<'a> {
+    fn from(data: alloc::borrow::Cow<'a, [u8]>) -> Self {
+        Self::with_item(ByteData::from_cow(data))
+    }
+}
+
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "queue")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+impl<'a> From<alloc::borrow::Cow<'a, str>> for ByteQueue<'a> {
+    fn from(data: alloc::borrow::Cow<'a, str>) -> Self {
+        Self::with_item(match data {
+            alloc::borrow::Cow::Borrowed(v) => ByteData::from_borrowed(v.as_bytes()),
+            alloc::borrow::Cow::Owned(v) => ByteData::from_owned(v.into_bytes()),
+        })
+    }
+}
+
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "queue")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+impl<'a> From<ByteQueue<'a>> for ByteData<'a> {
+    fn from(mut data: ByteQueue<'a>) -> Self {
+        let fst = match data.pop_front() {
+            Some(v) => v,
+            None => return ByteData::empty(),
+        };
+        if data.is_empty() {
+            return fst;
+        }
+        let mut out = crate::SharedBytesBuilder::with_capacity(fst.len() + data.len());
+        out.extend_from_slice(fst.as_slice());
+        for i in data {
+            out.extend_from_slice(i.as_slice());
+        }
+        ByteData::from_shared(out.build())
+    }
+}
+
 impl<'a> IntoIterator for ByteQueue<'a> {
     type Item = ByteData<'a>;
     type IntoIter = ChunkIter<'a>;
