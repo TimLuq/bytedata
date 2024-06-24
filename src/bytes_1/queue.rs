@@ -1,6 +1,6 @@
 use ::bytes_1 as bytes;
 
-use crate::{ByteData, ByteQueue};
+use crate::ByteQueue;
 
 #[cfg_attr(docsrs, doc(cfg(feature = "bytes_1")))]
 #[cfg_attr(docsrs, doc(cfg(feature = "queue")))]
@@ -21,11 +21,14 @@ impl From<ByteQueue<'_>> for bytes::Bytes {
     }
 }
 
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 #[cfg_attr(docsrs, doc(cfg(feature = "bytes_1")))]
 #[cfg_attr(docsrs, doc(cfg(feature = "queue")))]
 impl From<bytes::Bytes> for ByteQueue<'_> {
+    #[inline]
     fn from(dat: bytes::Bytes) -> Self {
-        Self::from(ByteData::from(dat))
+        Self::from(crate::ByteData::from(dat))
     }
 }
 
@@ -58,6 +61,7 @@ impl bytes::Buf for ByteQueue<'_> {
         }
     }
 
+    #[inline]
     fn has_remaining(&self) -> bool {
         !self.is_empty()
     }
@@ -71,17 +75,19 @@ impl bytes::Buf for ByteQueue<'_> {
         if len == 0 {
             return bytes::Bytes::new();
         }
-        let f = self.front_mut().unwrap();
+        let mut f = self.pop_front().unwrap();
         if f.len() == len {
-            return self.pop_front().unwrap().into();
+            return f.into();
         }
         if f.len() > len {
             let r = f.copy_to_bytes(len);
-            self.remain -= len;
+            self.push_front(f);
             return r;
         }
 
         let mut ret = bytes::BytesMut::with_capacity(len);
+        ret.put(f.as_slice());
+        len -= f.len();
         while len > 0 {
             let mut f = self.pop_front().unwrap();
             let l = f.len();

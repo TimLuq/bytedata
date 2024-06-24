@@ -65,7 +65,7 @@ impl<'a> core::fmt::Display for ByteStringRender<'a> {
                 b'\n' => f.write_str("\\n")?,
                 b'\r' => f.write_str("\\r")?,
                 b'\t' => f.write_str("\\t")?,
-                b if b >= 32 && b < 127 => {
+                b if (32..127).contains(&b) => {
                     f.write_str(unsafe { core::str::from_utf8_unchecked(&[b]) })?
                 }
                 b => f.write_fmt(format_args!("\\x{:02x}", b))?,

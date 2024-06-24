@@ -62,9 +62,9 @@ mod byte_chunk;
 pub use byte_chunk::ByteChunk;
 
 #[cfg(feature = "queue")]
-mod queue;
+pub mod queue;
 #[cfg(feature = "queue")]
-pub use queue::ByteQueue;
+pub use queue::{ByteQueue, StringQueue};
 
 #[cfg(feature = "bytes_1")]
 mod bytes_1;

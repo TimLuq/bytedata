@@ -48,6 +48,7 @@ static SHARED_BYTES_BVT: super::SBytesVtable = super::SBytesVtable {
 #[cfg(feature = "bytes_1_safe")]
 #[cfg_attr(docsrs, doc(cfg(feature = "bytes_1")))]
 impl From<SharedBytes> for bytes::Bytes {
+    #[inline]
     fn from(dat: SharedBytes) -> Self {
         bytes::Bytes::copy_from_slice(dat.as_slice())
     }
@@ -69,6 +70,7 @@ impl From<SharedBytes> for bytes::Bytes {
 
 #[cfg_attr(docsrs, doc(cfg(feature = "bytes_1")))]
 impl From<bytes::Bytes> for SharedBytes {
+    #[inline]
     fn from(dat: bytes::Bytes) -> Self {
         Self::from_slice(dat.as_ref())
     }
@@ -94,6 +96,7 @@ impl bytes::Buf for SharedBytes {
         self.len -= cnt as u32;
     }
 
+    #[inline]
     fn has_remaining(&self) -> bool {
         self.len > 0
     }

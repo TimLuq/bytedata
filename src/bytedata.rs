@@ -61,7 +61,7 @@ impl<'a> ByteData<'a> {
     #[cfg_attr(docsrs, doc(cfg(feature = "chunk")))]
     #[inline]
     pub const fn from_chunk<const L: usize>(dat: &[u8; L]) -> Self {
-        Self::Chunk(crate::byte_chunk::ByteChunk::from_array(&dat))
+        Self::Chunk(crate::byte_chunk::ByteChunk::from_array(dat))
     }
 
     /// Creates a `ByteData` from a borrowed slice of bytes.

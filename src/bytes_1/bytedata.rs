@@ -61,6 +61,7 @@ impl bytes::Buf for ByteData<'_> {
         self.make_sliced(cnt..);
     }
 
+    #[inline]
     fn has_remaining(&self) -> bool {
         !self.is_empty()
     }
