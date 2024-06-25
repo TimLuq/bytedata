@@ -142,6 +142,11 @@ impl<'a> StringQueue<'a> {
     pub fn chars(&self) -> super::CharIter<'a, '_> {
         super::char_iter::CharIter::new(self)
     }
+
+    /// Iterates over each chunk of bytes in the queue.
+    pub fn byte_chunks(&self) -> super::LinkedIter<'a, '_> {
+        self.queue.chunks()
+    }
 }
 
 impl<'a> From<StringData<'a>> for StringQueue<'a> {
