@@ -177,7 +177,7 @@ impl<'a> ByteQueue<'a> {
                 continue;
             }
             if start != 0 || max < l {
-                let s = v.sliced(start..max.min(v.len() - start));
+                let s = v.sliced(start..(max + start).min(l));
                 let b = s.len();
                 out.push_back(s);
                 max -= b;
