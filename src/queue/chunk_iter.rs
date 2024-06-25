@@ -3,7 +3,7 @@ use crate::ByteData;
 use super::linked_root::LinkedRoot;
 
 /// An iterator over the chunks of a [`ByteQueue`].
-/// 
+///
 /// [`ByteQueue`]: crate::ByteQueue
 #[cfg_attr(docsrs, doc(cfg(feature = "queue")))]
 pub struct ChunkIter<'a>(LinkedRoot<'a>);
@@ -51,7 +51,7 @@ impl<'a> ExactSizeIterator for ChunkIter<'a> {
 impl<'a> core::iter::FusedIterator for ChunkIter<'a> {}
 
 /// An iterator over the chunks of a [`ByteQueue`].
-/// 
+///
 /// [`ByteQueue`]: crate::ByteQueue
 #[cfg_attr(docsrs, doc(cfg(feature = "queue")))]
 pub struct StrChunkIter<'a>(LinkedRoot<'a>);
@@ -67,7 +67,9 @@ impl<'a> Iterator for StrChunkIter<'a> {
     type Item = crate::StringData<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.0.pop_front().map(|x| unsafe { crate::StringData::from_bytedata_unchecked(x) })
+        self.0
+            .pop_front()
+            .map(|x| unsafe { crate::StringData::from_bytedata_unchecked(x) })
     }
 
     #[inline]
@@ -84,7 +86,9 @@ impl<'a> Iterator for StrChunkIter<'a> {
 impl<'a> DoubleEndedIterator for StrChunkIter<'a> {
     #[inline]
     fn next_back(&mut self) -> Option<Self::Item> {
-        self.0.pop_back().map(|x| unsafe { crate::StringData::from_bytedata_unchecked(x) })
+        self.0
+            .pop_back()
+            .map(|x| unsafe { crate::StringData::from_bytedata_unchecked(x) })
     }
 }
 

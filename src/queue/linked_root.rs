@@ -41,12 +41,12 @@ impl<'a> LinkedRoot<'a> {
     pub(super) const fn len(&self) -> usize {
         self.data.len as usize
     }
-    
+
     #[inline]
     fn first_mut(&mut self) -> Option<&mut super::linked_node_data::LinkedNodeData<'a>> {
         Some(&mut self.data)
     }
-    
+
     #[inline]
     fn last_mut(&mut self) -> Option<&mut super::linked_node_data::LinkedNodeData<'a>> {
         Some(&mut self.data)
@@ -171,7 +171,7 @@ impl<'a> LinkedRoot<'a> {
         }
         Some(r)
     }
-    
+
     pub(super) fn pop_front(&mut self) -> Option<ByteData<'a>> {
         if self.count == 0 {
             return None;
@@ -226,7 +226,6 @@ impl<'a> LinkedRoot<'a> {
 }
 
 impl<'a> LinkedRoot<'a> {
-
     pub(super) fn push_back(&mut self, mut data: ByteData<'a>) {
         if data.is_empty() {
             return;

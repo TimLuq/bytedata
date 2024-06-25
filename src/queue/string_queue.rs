@@ -1,5 +1,5 @@
-use crate::StringData;
 use super::ByteQueue;
+use crate::StringData;
 
 /// A queue of strings.
 pub struct StringQueue<'a> {
@@ -10,13 +10,42 @@ impl<'a> StringQueue<'a> {
     /// Create a new empty `StringQueue`.
     #[inline]
     pub const fn new() -> Self {
-        Self { queue: ByteQueue::new() }
+        Self {
+            queue: ByteQueue::new(),
+        }
     }
 
     /// Create a new `StringQueue` with a single item.
     #[inline]
     pub const fn with_item(data: StringData<'a>) -> Self {
-        Self { queue: ByteQueue::with_item(data.into_bytedata()) }
+        Self {
+            queue: ByteQueue::with_item(data.into_bytedata()),
+        }
+    }
+
+    #[inline]
+    pub(super) const fn as_inner(&self) -> &ByteQueue<'a> {
+        &self.queue
+    }
+
+    /// Checks if the queue is full. When the feature `alloc` is enabled, this will always return `false`.
+    #[inline]
+    pub const fn is_full(&self) -> bool {
+        self.queue.is_full()
+    }
+
+    /// Append string to the queue.
+    #[inline]
+    pub fn push_back(&mut self, data: impl Into<StringData<'a>>) {
+        let data: StringData = data.into();
+        self.queue.push_back(data.into_bytedata());
+    }
+
+    /// Prepend string into the queue.
+    #[inline]
+    pub fn push_front(&mut self, data: impl Into<StringData<'a>>) {
+        let data = data.into();
+        self.queue.push_front(data.into_bytedata());
     }
 
     /// Pop the first item from the queue.
@@ -71,6 +100,47 @@ impl<'a> StringQueue<'a> {
     #[inline]
     pub fn into_iter(self) -> super::StrChunkIter<'a> {
         super::StrChunkIter::new(self.queue.queue)
+    }
+
+    /// Slices the queue and returns a new queue that represents the given range.
+    /// Panics if the range boundary is invalid UTF-8.
+    pub fn slice(&self, range: impl core::ops::RangeBounds<usize>) -> Self {
+        let slic = self.queue.slice(range);
+        if slic.is_empty() {
+            return Self::new();
+        }
+        let f = slic.front().unwrap();
+        if f[0] & 0b1100_0000 == 0b1000_0000 {
+            panic!("StringQueue: Invalid UTF-8 start in range");
+        }
+        let b = slic.back().unwrap();
+        let end_byte = b[b.len() - 1];
+        if end_byte & 0b1100_0000 == 0b1100_0000 {
+            panic!("StringQueue: Invalid UTF-8 end in range");
+        }
+        if end_byte & 0b1100_0000 == 0b1000_0000 {
+            // compute backwards to find the start of the char to see if the number of bytes is correct
+            let mut i = b.len() - 2;
+            while b[i] & 0b1100_0000 == 0b1000_0000 {
+                i -= 1;
+            }
+            let char_len = b.len() - i;
+            if char_len == 2 && end_byte & 0b1110_0000 != 0b1100_0000 {
+                panic!("StringQueue: Invalid UTF-8 end in range");
+            }
+            if char_len == 3 && end_byte & 0b1111_0000 != 0b1110_0000 {
+                panic!("StringQueue: Invalid UTF-8 end in range");
+            }
+            if char_len == 4 && end_byte & 0b1111_1000 != 0b1111_0000 {
+                panic!("StringQueue: Invalid UTF-8 end in range");
+            }
+        }
+        Self { queue: slic }
+    }
+
+    /// Iterates over each character in the queue.
+    pub fn chars(&self) -> super::CharIter<'a, '_> {
+        super::char_iter::CharIter::new(self)
     }
 }
 

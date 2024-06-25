@@ -13,7 +13,12 @@ pub struct ByteIter<'a, 'b> {
 impl<'a, 'b> ByteIter<'a, 'b> {
     #[inline]
     pub(super) fn new(queue: &'b ByteQueue<'a>) -> Self {
-        Self { inner: queue.chunks(), chunk: None, offset: 0, len: queue.len() }
+        Self {
+            inner: queue.chunks(),
+            chunk: None,
+            offset: 0,
+            len: queue.len(),
+        }
     }
 
     /// Skip the next `n` bytes.

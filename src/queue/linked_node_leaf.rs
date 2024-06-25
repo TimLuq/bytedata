@@ -2,7 +2,6 @@ use crate::ByteData;
 
 use super::linked_node_data::LinkedNodeData;
 
-
 pub(super) struct LinkedNodeLeaf<'a> {
     pub(super) prev: *mut LinkedNodeLeaf<'a>,
     pub(super) data: LinkedNodeData<'a>,

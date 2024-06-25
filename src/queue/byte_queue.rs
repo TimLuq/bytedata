@@ -2,9 +2,9 @@ use core::{ops::RangeBounds, panic};
 
 use crate::ByteData;
 
-use crate::queue::ChunkIter;
-use super::linked_root::LinkedRoot;
 use super::byte_iter::ByteIter;
+use super::linked_root::LinkedRoot;
+use crate::queue::ChunkIter;
 
 /// A queue of byte chunks.
 #[cfg_attr(docsrs, doc(cfg(feature = "queue")))]

@@ -476,3 +476,16 @@ impl core::fmt::UpperHex for ByteData<'_> {
         Ok(())
     }
 }
+
+impl<'a> Iterator for ByteData<'a> {
+    type Item = u8;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.is_empty() {
+            return None;
+        }
+        let r = self[0];
+        self.make_sliced(1..);
+        Some(r)
+    }
+}

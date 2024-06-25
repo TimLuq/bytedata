@@ -14,8 +14,15 @@ pub struct LinkedIter<'a: 'b, 'b> {
 #[cfg(feature = "alloc")]
 impl<'a: 'b, 'b> LinkedIter<'a, 'b> {
     #[inline]
-    pub(super) const fn new(chamber: Option<&'b crate::ByteData<'a>>, node: Option<&'b super::linked_node_leaf::LinkedNodeLeaf<'a>>) -> Self {
-        Self { chamber, node, offset: 0 }
+    pub(super) const fn new(
+        chamber: Option<&'b crate::ByteData<'a>>,
+        node: Option<&'b super::linked_node_leaf::LinkedNodeLeaf<'a>>,
+    ) -> Self {
+        Self {
+            chamber,
+            node,
+            offset: 0,
+        }
     }
 
     fn item_len(&self) -> usize {
