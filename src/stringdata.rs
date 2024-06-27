@@ -198,7 +198,7 @@ impl<'a> StringData<'a> {
         if end < b.len() && b[end] & 0b1100_0000 == 0b1000_0000 {
             panic!("StringData::sliced: end is not a char boundary");
         }
-        if start != 0 && b[start] & 0b1100_0000 == 0b1000_0000 {
+        if start != 0 && (start == end || b[start] & 0b1100_0000 == 0b1000_0000) {
             panic!("StringData::sliced: start is not a char boundary");
         }
         start..end
