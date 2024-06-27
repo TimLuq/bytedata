@@ -125,13 +125,13 @@ impl<'a> StringQueue<'a> {
                 i -= 1;
             }
             let char_len = b.len() - i;
-            if char_len == 2 && end_byte & 0b1110_0000 != 0b1100_0000 {
+            if char_len == 2 && b[i] & 0b1110_0000 != 0b1100_0000 {
                 panic!("StringQueue: Invalid UTF-8 end in range");
             }
-            if char_len == 3 && end_byte & 0b1111_0000 != 0b1110_0000 {
+            if char_len == 3 && b[i] & 0b1111_0000 != 0b1110_0000 {
                 panic!("StringQueue: Invalid UTF-8 end in range");
             }
-            if char_len == 4 && end_byte & 0b1111_1000 != 0b1111_0000 {
+            if char_len == 4 && b[i] & 0b1111_1000 != 0b1111_0000 {
                 panic!("StringQueue: Invalid UTF-8 end in range");
             }
         }
