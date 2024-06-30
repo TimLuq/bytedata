@@ -109,7 +109,7 @@ impl<'a> ByteQueue<'a> {
         self.remain
     }
 
-    /// The amount of bytes in the queue.
+    /// The amount of chunks in the queue.
     #[inline]
     pub const fn chunk_len(&self) -> usize {
         self.queue.len()

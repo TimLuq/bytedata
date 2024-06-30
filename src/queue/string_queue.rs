@@ -66,19 +66,31 @@ impl<'a> StringQueue<'a> {
         }
     }
 
+    /// Get the first chunk in the queue.
+    #[inline]
+    pub fn front(&self) -> Option<&crate::StringData<'a>> {
+        self.queue.front().map(|v| unsafe { core::mem::transmute::<&crate::ByteData<'a>, &crate::StringData<'a>>(v) })
+    }
+
+    /// Get the last chunk in the queue.
+    #[inline]
+    pub fn back(&self) -> Option<&crate::StringData<'a>> {
+        self.queue.back().map(|v| unsafe { core::mem::transmute::<&crate::ByteData<'a>, &crate::StringData<'a>>(v) })
+    }
+
     /// Check if there are no bytes in the queue.
     #[inline]
     pub const fn is_empty(&self) -> bool {
         self.queue.is_empty()
     }
 
-    /// The amount of bytes in the queue.
+    /// The amount of utf-8 bytes in the queue.
     #[inline]
     pub const fn len(&self) -> usize {
         self.queue.len()
     }
 
-    /// The amount of bytes in the queue.
+    /// The amount of chunks in the queue.
     #[inline]
     pub const fn chunk_len(&self) -> usize {
         self.queue.chunk_len()
@@ -139,13 +151,26 @@ impl<'a> StringQueue<'a> {
     }
 
     /// Iterates over each character in the queue.
+    #[inline]
     pub fn chars(&self) -> super::CharIter<'a, '_> {
         super::char_iter::CharIter::new(self)
     }
 
+    /// Iterates over each byte in the queue.
+    #[inline]
+    pub fn bytes(&self) -> super::ByteIter<'a, '_> {
+        self.queue.bytes()
+    }
+
     /// Iterates over each chunk of bytes in the queue.
+    #[inline]
     pub fn byte_chunks(&self) -> super::LinkedIter<'a, '_> {
         self.queue.chunks()
+    }
+
+    /// Iterates over each chunk of string data in the queue.
+    pub fn chunks(&self) -> impl Iterator<Item = &'_ StringData<'a>> + ExactSizeIterator + '_ {
+        self.queue.chunks().map(|v| unsafe { core::mem::transmute::<&crate::ByteData<'a>, &crate::StringData<'a>>(v) })
     }
 }
 
