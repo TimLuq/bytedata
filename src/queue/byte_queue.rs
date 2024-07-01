@@ -2,7 +2,7 @@ use core::{ops::RangeBounds, panic};
 
 use crate::ByteData;
 
-use super::byte_iter::ByteIter;
+use super::byte_iter::{ByteIter, OwnedByteIter};
 use super::linked_root::LinkedRoot;
 use crate::queue::ChunkIter;
 
@@ -230,6 +230,127 @@ impl<'a> ByteQueue<'a> {
         index == 0 && data.is_empty()
     }
 
+    /// Check if the queue contains a certain byte sequence and return its starting position.
+    #[inline]
+    pub fn find_byte<F: FnMut(u8) -> bool>(&self, f: F) -> Option<usize> {
+        self.bytes().position(f)
+    }
+
+    /// Check if the queue contains a certain byte sequence and return its starting position.
+    #[inline]
+    pub fn find_slice(&self, data: &[u8]) -> Option<usize> {
+        self.find_slice_after(data, 0)
+    }
+
+    /// Check if the queue contains a certain byte sequence and return its starting position.
+    #[inline]
+    pub fn find_slice_after(&self, data: &[u8], start: usize) -> Option<usize> {
+        self.find_slice_pos(data, 0, start, start)
+            .map(|(a, _, _)| a)
+    }
+
+    /// Check if the queue contains a certain byte sequence and return its starting position.
+    #[inline]
+    pub(crate) fn find_slice_pos(
+        &self,
+        data: &[u8],
+        start_chunk: usize,
+        start_offset: usize,
+        start_byte: usize,
+    ) -> Option<(usize, usize, usize)> {
+        if data.is_empty() {
+            return Some((0, 0, 0));
+        }
+        self.find_slice_pos_nonempty(data, start_chunk, start_offset, start_byte)
+    }
+
+    /// Check if the queue contains a certain byte sequence and return its starting position.
+    fn find_slice_pos_nonempty(
+        &self,
+        data: &[u8],
+        mut start_chunk: usize,
+        mut start_offset: usize,
+        mut start_byte: usize,
+    ) -> Option<(usize, usize, usize)> {
+        debug_assert!(!data.is_empty(), "data is empty");
+        // the first byte in the sequence to match possible sequences
+        let first_byte = data[0];
+
+        'outer: loop {
+            let mut chunks = self.chunks().skip(start_chunk);
+            let mut s = match chunks.next() {
+                Some(v) => v,
+                None => return None,
+            };
+            let l = s.len();
+            if start_offset >= l {
+                start_offset -= l;
+                start_chunk += 1;
+                continue;
+            }
+            let marked_byte = loop {
+                let sl = &s.as_slice()[start_offset..];
+                let Some(a) = sl.iter().position(|x| *x == first_byte) else {
+                    s = match chunks.next() {
+                        Some(v) => v,
+                        None => return None,
+                    };
+                    start_offset = 0;
+                    start_chunk += 1;
+                    continue;
+                };
+                start_offset += a;
+                start_byte += a;
+                break start_byte;
+            };
+            let marked_chunk = start_chunk;
+            let marked_offset = start_offset;
+            let mut found_in = false;
+            let mut skipped_bytes = 0;
+            let mut data = data.iter().skip(1);
+            let mut sl = s.as_slice()[(start_offset + 1)..].iter();
+            while let Some(a) = data.next() {
+                let b = loop {
+                    let Some(b) = sl.next() else {
+                        s = match chunks.next() {
+                            Some(v) => v,
+                            None => return None,
+                        };
+                        sl = s.as_slice().iter();
+                        continue;
+                    };
+                    break *b;
+                };
+                if !found_in && b == first_byte {
+                    found_in = true;
+                    start_byte += skipped_bytes;
+                    start_offset += skipped_bytes;
+                    start_offset -= 1;
+                }
+                if b == *a {
+                    skipped_bytes += 1;
+                    continue;
+                }
+                if !found_in {
+                    start_byte += skipped_bytes;
+                    start_offset += skipped_bytes;
+                }
+                continue 'outer;
+            }
+            return Some((marked_byte, marked_chunk, marked_offset));
+        }
+    }
+
+    /// Split the queue on a certain byte sequence.
+    pub const fn split_on<'b>(&'b self, needle: &'b [u8]) -> super::SplitOn<'a, 'b> {
+        super::SplitOn::new(self, needle, 0)
+    }
+
+    /// Split the queue on a certain byte sequence.
+    pub const fn splitn_on<'b>(&'b self, needle: &'b [u8], max: usize) -> super::SplitOn<'a, 'b> {
+        super::SplitOn::new(self, needle, max)
+    }
+
     /// Iterates over each chunk of bytedata in the queue.
     #[inline]
     pub fn into_iter(self) -> ChunkIter<'a> {
@@ -240,6 +361,12 @@ impl<'a> ByteQueue<'a> {
     #[inline]
     pub fn bytes(&self) -> ByteIter<'a, '_> {
         ByteIter::new(&self)
+    }
+
+    /// Iterates over each byte in the queue.
+    #[inline]
+    pub fn into_bytes(self) -> OwnedByteIter<'a> {
+        OwnedByteIter::new(self)
     }
 }
 
@@ -368,6 +495,33 @@ impl<'a> Extend<alloc::vec::Vec<u8>> for ByteQueue<'a> {
     }
 }
 
+impl<'a> Extend<crate::StringData<'a>> for ByteQueue<'a> {
+    fn extend<T: IntoIterator<Item = crate::StringData<'a>>>(&mut self, iter: T) {
+        for i in iter {
+            self.queue.push_back(i.into_bytedata());
+        }
+    }
+}
+
+impl<'a> Extend<&'a str> for ByteQueue<'a> {
+    fn extend<T: IntoIterator<Item = &'a str>>(&mut self, iter: T) {
+        for i in iter {
+            self.queue.push_back(ByteData::from_borrowed(i.as_bytes()));
+        }
+    }
+}
+
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "queue")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+impl<'a> Extend<alloc::string::String> for ByteQueue<'a> {
+    fn extend<T: IntoIterator<Item = alloc::string::String>>(&mut self, iter: T) {
+        for i in iter {
+            self.queue.push_back(ByteData::from_owned(i.into_bytes()));
+        }
+    }
+}
+
 impl<'a, 'b> PartialEq<ByteQueue<'b>> for ByteQueue<'a> {
     #[inline]
     fn eq(&self, other: &ByteQueue<'b>) -> bool {
@@ -438,6 +592,34 @@ impl PartialEq<[u8]> for ByteQueue<'_> {
     }
 }
 
+impl<'b> PartialEq<crate::ByteData<'b>> for ByteQueue<'_> {
+    #[inline]
+    fn eq(&self, other: &crate::ByteData<'b>) -> bool {
+        self.eq(other.as_slice())
+    }
+}
+
+impl<'b> PartialEq<ByteQueue<'b>> for crate::ByteData<'_> {
+    #[inline]
+    fn eq(&self, other: &ByteQueue<'b>) -> bool {
+        other.eq(self.as_slice())
+    }
+}
+
+impl<'b> PartialEq<crate::StringData<'b>> for ByteQueue<'_> {
+    #[inline]
+    fn eq(&self, other: &crate::StringData<'b>) -> bool {
+        self.eq(other.as_bytes())
+    }
+}
+
+impl<'b> PartialEq<ByteQueue<'b>> for crate::StringData<'_> {
+    #[inline]
+    fn eq(&self, other: &ByteQueue<'b>) -> bool {
+        other.eq(self.as_bytes())
+    }
+}
+
 impl<'b> PartialEq<&'b [u8]> for ByteQueue<'_> {
     #[inline]
     fn eq(&self, other: &&'b [u8]) -> bool {
@@ -449,6 +631,27 @@ impl PartialEq<ByteQueue<'_>> for [u8] {
     #[inline]
     fn eq(&self, other: &ByteQueue<'_>) -> bool {
         other.eq(self)
+    }
+}
+
+impl<'b> PartialEq<&'b str> for ByteQueue<'_> {
+    #[inline]
+    fn eq(&self, other: &&'b str) -> bool {
+        self.eq(other.as_bytes())
+    }
+}
+
+impl PartialEq<str> for ByteQueue<'_> {
+    #[inline]
+    fn eq(&self, other: &str) -> bool {
+        self.eq(other.as_bytes())
+    }
+}
+
+impl PartialEq<ByteQueue<'_>> for str {
+    #[inline]
+    fn eq(&self, other: &ByteQueue<'_>) -> bool {
+        other.eq(self.as_bytes())
     }
 }
 

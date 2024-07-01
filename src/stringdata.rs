@@ -83,6 +83,12 @@ impl<'a> StringData<'a> {
         unsafe { core::mem::transmute(self) }
     }
 
+    /// Returns a reference to the underlying [`ByteData`].
+    #[inline]
+    pub const fn as_bytedata(&self) -> &ByteData<'a> {
+        &self.data
+    }
+
     #[cfg(feature = "alloc")]
     /// Creates a `StringData` from a `String`.
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
@@ -514,5 +520,47 @@ impl core::fmt::Debug for StringData<'_> {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         core::fmt::Debug::fmt(self.as_str(), f)
+    }
+}
+
+impl core::fmt::Display for StringData<'_> {
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        core::fmt::Display::fmt(self.as_str(), f)
+    }
+}
+
+impl<'a> AsRef<crate::ByteData<'a>> for StringData<'a> {
+    #[inline]
+    fn as_ref(&self) -> &crate::ByteData<'a> {
+        &self.data
+    }
+}
+
+impl<'a> Iterator for StringData<'a> {
+    type Item = char;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.is_empty() {
+            return None;
+        }
+        let c = self.as_str().chars().next().unwrap();
+        self.make_sliced(c.len_utf8()..);
+        Some(c)
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.as_str().chars().size_hint()
+    }
+}
+
+impl<'a, 'b> IntoIterator for &'b StringData<'a> {
+    type Item = char;
+    type IntoIter = core::str::Chars<'b>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.as_str().chars()
     }
 }

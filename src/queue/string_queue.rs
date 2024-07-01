@@ -2,6 +2,8 @@ use super::ByteQueue;
 use crate::StringData;
 
 /// A queue of strings.
+#[repr(transparent)]
+#[derive(Clone)]
 pub struct StringQueue<'a> {
     queue: ByteQueue<'a>,
 }
@@ -24,8 +26,20 @@ impl<'a> StringQueue<'a> {
     }
 
     #[inline]
-    pub(super) const fn as_inner(&self) -> &ByteQueue<'a> {
+    pub(super) const unsafe fn from_bytequeue(q: ByteQueue<'a>) -> Self {
+        StringQueue { queue: q }
+    }
+
+    /// Get the inner bytequeue.
+    #[inline]
+    pub const fn as_bytequeue(&self) -> &ByteQueue<'a> {
         &self.queue
+    }
+
+    /// Get the inner bytequeue.
+    #[inline]
+    pub const fn into_bytequeue(self) -> ByteQueue<'a> {
+        unsafe { core::mem::transmute(self) }
     }
 
     /// Checks if the queue is full. When the feature `alloc` is enabled, this will always return `false`.
@@ -69,13 +83,17 @@ impl<'a> StringQueue<'a> {
     /// Get the first chunk in the queue.
     #[inline]
     pub fn front(&self) -> Option<&crate::StringData<'a>> {
-        self.queue.front().map(|v| unsafe { core::mem::transmute::<&crate::ByteData<'a>, &crate::StringData<'a>>(v) })
+        self.queue.front().map(|v| unsafe {
+            core::mem::transmute::<&crate::ByteData<'a>, &crate::StringData<'a>>(v)
+        })
     }
 
     /// Get the last chunk in the queue.
     #[inline]
     pub fn back(&self) -> Option<&crate::StringData<'a>> {
-        self.queue.back().map(|v| unsafe { core::mem::transmute::<&crate::ByteData<'a>, &crate::StringData<'a>>(v) })
+        self.queue.back().map(|v| unsafe {
+            core::mem::transmute::<&crate::ByteData<'a>, &crate::StringData<'a>>(v)
+        })
     }
 
     /// Check if there are no bytes in the queue.
@@ -156,10 +174,28 @@ impl<'a> StringQueue<'a> {
         super::char_iter::CharIter::new(self)
     }
 
+    /// Iterates over each character in the queue.
+    #[inline]
+    pub fn into_chars(self) -> super::OwnedCharIter<'a> {
+        super::char_iter::OwnedCharIter::new(self)
+    }
+
+    /// Iterates over each character in the queue.
+    #[inline]
+    pub fn chars_indecies(&self) -> super::CharIndecies<'a, '_> {
+        super::char_iter::CharIndecies::new(self)
+    }
+
     /// Iterates over each byte in the queue.
     #[inline]
     pub fn bytes(&self) -> super::ByteIter<'a, '_> {
         self.queue.bytes()
+    }
+
+    /// Iterates over each byte in the queue.
+    #[inline]
+    pub fn into_bytes(self) -> super::OwnedByteIter<'a> {
+        self.into_bytequeue().into_bytes()
     }
 
     /// Iterates over each chunk of bytes in the queue.
@@ -170,7 +206,33 @@ impl<'a> StringQueue<'a> {
 
     /// Iterates over each chunk of string data in the queue.
     pub fn chunks(&self) -> impl Iterator<Item = &'_ StringData<'a>> + ExactSizeIterator + '_ {
-        self.queue.chunks().map(|v| unsafe { core::mem::transmute::<&crate::ByteData<'a>, &crate::StringData<'a>>(v) })
+        self.queue.chunks().map(|v| unsafe {
+            core::mem::transmute::<&crate::ByteData<'a>, &crate::StringData<'a>>(v)
+        })
+    }
+
+    /// Split the queue on a certain str sequence.
+    pub const fn split_on<'b>(&'b self, needle: &'b str) -> super::SplitOnStr<'a, 'b> {
+        super::SplitOnStr::new(self, needle, 0)
+    }
+
+    /// Split the queue on a certain str sequence.
+    pub const fn splitn_on<'b>(&'b self, needle: &'b str, max: usize) -> super::SplitOnStr<'a, 'b> {
+        super::SplitOnStr::new(self, needle, max)
+    }
+
+    /// Split the queue on a certain byte sequence.
+    pub const fn split_on_bytes<'b>(&'b self, needle: &'b [u8]) -> super::SplitOn<'a, 'b> {
+        super::SplitOn::new(self.as_bytequeue(), needle, 0)
+    }
+
+    /// Split the queue on a certain byte sequence.
+    pub const fn splitn_on_bytes<'b>(
+        &'b self,
+        needle: &'b [u8],
+        max: usize,
+    ) -> super::SplitOn<'a, 'b> {
+        super::SplitOn::new(self.as_bytequeue(), needle, max)
     }
 }
 
@@ -239,5 +301,126 @@ impl<'a> IntoIterator for StringQueue<'a> {
     #[inline]
     fn into_iter(self) -> Self::IntoIter {
         super::StrChunkIter::new(self.queue.queue)
+    }
+}
+
+impl<'a> Extend<StringData<'a>> for StringQueue<'a> {
+    fn extend<T: IntoIterator<Item = StringData<'a>>>(&mut self, iter: T) {
+        for i in iter {
+            self.queue.push_back(i.into_bytedata());
+        }
+    }
+}
+
+impl<'a> Extend<&'a str> for StringQueue<'a> {
+    fn extend<T: IntoIterator<Item = &'a str>>(&mut self, iter: T) {
+        for i in iter {
+            self.queue.push_back(StringData::from_borrowed(i));
+        }
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl<'a> Extend<alloc::string::String> for StringQueue<'a> {
+    fn extend<T: IntoIterator<Item = alloc::string::String>>(&mut self, iter: T) {
+        for i in iter {
+            self.queue.push_back(StringData::from_owned(i));
+        }
+    }
+}
+
+impl core::fmt::Display for crate::StringQueue<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        for c in self.chunks() {
+            core::fmt::Display::fmt(c, f)?;
+        }
+        Ok(())
+    }
+}
+
+impl core::fmt::Debug for crate::StringQueue<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        let mut l = f.debug_list();
+        l.entries(self.chunks());
+        l.finish()
+    }
+}
+
+impl Eq for crate::StringQueue<'_> {}
+impl<'a, 'b> PartialEq<crate::StringQueue<'b>> for crate::StringQueue<'a> {
+    #[inline]
+    fn eq(&self, other: &crate::StringQueue<'b>) -> bool {
+        self.queue == other.queue
+    }
+}
+
+impl<'a, 'b> PartialEq<crate::ByteQueue<'b>> for crate::StringQueue<'a> {
+    #[inline]
+    fn eq(&self, other: &crate::ByteQueue<'b>) -> bool {
+        self.queue == *other
+    }
+}
+impl<'a, 'b> PartialEq<crate::StringQueue<'b>> for crate::ByteQueue<'a> {
+    #[inline]
+    fn eq(&self, other: &crate::StringQueue<'b>) -> bool {
+        *self == other.queue
+    }
+}
+
+impl<'a, 'b> PartialEq<crate::StringData<'b>> for crate::StringQueue<'a> {
+    #[inline]
+    fn eq(&self, other: &crate::StringData<'b>) -> bool {
+        self.queue == *other
+    }
+}
+impl<'a, 'b> PartialEq<crate::StringQueue<'b>> for crate::StringData<'a> {
+    #[inline]
+    fn eq(&self, other: &crate::StringQueue<'b>) -> bool {
+        *self == other.queue
+    }
+}
+
+impl<'a, 'b> PartialEq<crate::ByteData<'b>> for crate::StringQueue<'a> {
+    #[inline]
+    fn eq(&self, other: &crate::ByteData<'b>) -> bool {
+        self.queue == *other
+    }
+}
+impl<'a, 'b> PartialEq<crate::StringQueue<'b>> for crate::ByteData<'a> {
+    #[inline]
+    fn eq(&self, other: &crate::StringQueue<'b>) -> bool {
+        *self == other.queue
+    }
+}
+
+impl<'a, 'b> PartialEq<&'b str> for crate::StringQueue<'a> {
+    #[inline]
+    fn eq(&self, other: &&'b str) -> bool {
+        &self.queue == *other
+    }
+}
+impl<'a> PartialEq<str> for crate::StringQueue<'a> {
+    #[inline]
+    fn eq(&self, other: &str) -> bool {
+        &self.queue == other
+    }
+}
+impl<'a> PartialEq<crate::StringQueue<'a>> for str {
+    #[inline]
+    fn eq(&self, other: &crate::StringQueue<'a>) -> bool {
+        self == &other.queue
+    }
+}
+
+impl<'a, 'b> PartialEq<[u8]> for crate::StringQueue<'a> {
+    #[inline]
+    fn eq(&self, other: &[u8]) -> bool {
+        &self.queue == other
+    }
+}
+impl<'a> PartialEq<crate::StringQueue<'a>> for [u8] {
+    #[inline]
+    fn eq(&self, other: &crate::StringQueue<'a>) -> bool {
+        self == &other.queue
     }
 }

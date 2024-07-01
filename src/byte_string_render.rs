@@ -78,9 +78,9 @@ impl<'a> core::fmt::Display for ByteStringRender<'a> {
 /// Helper wrapper to render a byte slice as a bytestring similar to [`core::ascii::escape_default`].
 ///
 /// ```ignore
-/// format!("{}", ByteStringRender::from_slice(b"Hello,\nWorld!"));
+/// format!("{}", MultiByteStringRender::new(&[b"Hello,\nWorld!"]));
 /// // => "Hello,\\nWorld!"
-/// format!("{:?}", ByteStringRender::from_slice(b"Hello,\nWorld!"));
+/// format!("{:?}", MultiByteStringRender::new(&[b"Hello,\nWorld!"]));
 /// // => "b\"Hello,\\nWorld!\""
 /// ```
 pub struct MultiByteStringRender<'a, T, R> {

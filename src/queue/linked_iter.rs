@@ -44,6 +44,45 @@ impl<'a: 'b, 'b> LinkedIter<'a, 'b> {
         }
         len
     }
+
+    /// Skips the next `n` items.
+    pub fn skip(mut self, mut n: usize) -> Self {
+        if n == 0 {
+            return self;
+        }
+        #[cfg(feature = "alloc")]
+        if self.chamber.take().is_some() {
+            n -= 1;
+        }
+        while n != 0 {
+            #[cfg(feature = "alloc")]
+            let Some(node) = self.node
+            else {
+                return self;
+            };
+            #[cfg(feature = "alloc")]
+            let data = &node.data;
+            #[cfg(not(feature = "alloc"))]
+            let data = self.data;
+
+            #[cfg(not(feature = "alloc"))]
+            if self.offset == data.len as usize {
+                return self;
+            }
+
+            #[cfg(feature = "alloc")]
+            if self.offset == data.len as usize {
+                self.node = unsafe { node.next.as_ref() };
+                self.offset = 0;
+                continue;
+            }
+
+            let skip = core::cmp::min(n, data.len as usize - self.offset);
+            self.offset += skip;
+            n -= skip;
+        }
+        self
+    }
 }
 
 #[cfg(not(feature = "alloc"))]

@@ -75,6 +75,9 @@ mod http_body_04;
 #[cfg(feature = "http-body_1")]
 mod http_body_1;
 
+#[cfg(feature = "nom_7")]
+mod nom_7;
+
 #[cfg(feature = "serde_1")]
 mod serde_1;
 
