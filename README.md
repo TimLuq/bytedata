@@ -56,3 +56,8 @@ The trait `http_body::Body` is then implemented for `ByteData` and `SharedBytes`
 
 Enables the `ByteQueue` type which is a queue of `ByteData` objects that can be pushed to and popped from.
 Unless the `alloc` feature is enabled, the queue will be limited to a maximum size of 8 elements.
+
+### nom_7
+
+Enables integration with the `nom` crate (version `>=7, <8`).
+This allows for `ByteData`, `StringData`, `ByteQueue`, and `StringQueue` data to be parsed using `nom` parsers.
