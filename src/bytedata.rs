@@ -45,7 +45,11 @@ impl<'a> ByteData<'a> {
     #[cfg_attr(docsrs, doc(cfg(feature = "chunk")))]
     #[inline]
     pub const fn from_chunk_slice(dat: &[u8]) -> Self {
-        Self::Chunk(crate::byte_chunk::ByteChunk::from_slice(dat))
+        if dat.is_empty() {
+            Self::Static(&[])
+        } else {
+            Self::Chunk(crate::byte_chunk::ByteChunk::from_slice(dat))
+        }
     }
 
     #[cfg(feature = "chunk")]
@@ -61,13 +65,21 @@ impl<'a> ByteData<'a> {
     #[cfg_attr(docsrs, doc(cfg(feature = "chunk")))]
     #[inline]
     pub const fn from_chunk<const L: usize>(dat: &[u8; L]) -> Self {
-        Self::Chunk(crate::byte_chunk::ByteChunk::from_array(dat))
+        if L == 0 {
+            Self::Static(&[])
+        } else {
+            Self::Chunk(crate::byte_chunk::ByteChunk::from_array(dat))
+        }
     }
 
     /// Creates a `ByteData` from a borrowed slice of bytes.
     #[inline]
     pub const fn from_borrowed(dat: &'a [u8]) -> Self {
-        Self::Borrowed(dat)
+        if dat.is_empty() {
+            Self::Static(&[])
+        } else {
+            Self::Borrowed(dat)
+        }
     }
 
     #[cfg(feature = "alloc")]
@@ -83,6 +95,9 @@ impl<'a> ByteData<'a> {
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     #[inline]
     pub fn from_owned(dat: Vec<u8>) -> Self {
+        if dat.is_empty() {
+            return Self::Static(&[]);
+        }
         #[cfg(feature = "chunk")]
         if dat.len() <= 12 {
             return Self::Chunk(crate::byte_chunk::ByteChunk::from_slice(&dat));
@@ -257,6 +272,80 @@ impl<'a> ByteData<'a> {
             #[cfg(feature = "chunk")]
             Self::Chunk(dat) => ByteData::Chunk(dat.into_sliced(range)),
         }
+    }
+
+    /// Split the `ByteData` at the given position.
+    #[inline]
+    pub fn take_bytes(&mut self, position: usize) -> ByteData<'a> {
+        let a = self.sliced(0..position);
+        self.make_sliced(position..);
+        a
+    }
+
+    /// Split the `ByteData` at the given position.
+    #[inline]
+    pub fn split_at(mut self, position: usize) -> (ByteData<'a>, ByteData<'a>) {
+        let a = self.sliced(0..position);
+        self.make_sliced(position..);
+        (a, self)
+    }
+
+    /// Split the `ByteData` at the first occurrence of the given byte sequence.
+    #[inline]
+    pub fn split_once_on(
+        self,
+        needle: &[u8],
+    ) -> Result<(ByteData<'a>, ByteData<'a>), ByteData<'a>> {
+        let a = match crate::const_split_once_bytes(self.as_slice(), needle) {
+            Some((a, _)) => a.len(),
+            None => return Err(self),
+        };
+        Ok(self.split_at(a))
+    }
+
+    /// Split the `ByteData` at the first occurrence of the given byte sequence.
+    #[inline]
+    pub fn split_on<'b>(self, needle: &'b [u8]) -> impl Iterator<Item = ByteData<'a>> + Send + 'b
+    where
+        'a: 'b,
+    {
+        struct It<'a, 'b>(ByteData<'a>, &'b [u8], bool);
+        impl<'a, 'b> Iterator for It<'a, 'b> {
+            type Item = ByteData<'a>;
+
+            fn next(&mut self) -> Option<Self::Item> {
+                if self.0.is_empty() {
+                    return None;
+                }
+                let a = match crate::const_split_once_bytes(self.0.as_slice(), self.1) {
+                    Some((a, _)) => a.len(),
+                    None => {
+                        let r = core::mem::replace(&mut self.0, ByteData::empty());
+                        return Some(r);
+                    }
+                };
+                if a == 0 && self.2 {
+                    self.2 = false;
+                    return Some(ByteData::empty());
+                }
+                self.2 = false;
+                let a = self.0.take_bytes(a);
+                Some(a)
+            }
+
+            fn size_hint(&self) -> (usize, Option<usize>) {
+                if self.0.is_empty() {
+                    (0, Some(0))
+                } else if self.0.len() < self.1.len() {
+                    (1, Some(1))
+                } else if self.0.len() < self.1.len() * 2 {
+                    (1, Some(2))
+                } else {
+                    (1, None)
+                }
+            }
+        }
+        It(self, needle, true)
     }
 }
 

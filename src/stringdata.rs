@@ -239,6 +239,38 @@ impl<'a> StringData<'a> {
         self.data.make_sliced(range);
     }
 
+    /// Split the `StringData` at the given position.
+    #[inline]
+    pub fn split_at(mut self, position: usize) -> (StringData<'a>, StringData<'a>) {
+        let a = self.sliced(0..position);
+        self.make_sliced(position..);
+        (a, self)
+    }
+
+    /// Split the `StringData` at the first occurrence of the given byte sequence.
+    #[inline]
+    pub fn split_once_on(
+        self,
+        needle: &str,
+    ) -> Result<(StringData<'a>, StringData<'a>), StringData<'a>> {
+        let a = match crate::const_split_once_bytes(self.as_bytes(), needle.as_bytes()) {
+            Some((a, _)) => a.len(),
+            None => return Err(self),
+        };
+        Ok(self.split_at(a))
+    }
+
+    /// Split the `StringData` at the first occurrence of the given str sequence.
+    #[inline]
+    pub fn split_on<'b>(self, needle: &'b str) -> impl Iterator<Item = StringData<'a>> + Send + 'b
+    where
+        'a: 'b,
+    {
+        self.data
+            .split_on(needle.as_bytes())
+            .map(|x| unsafe { Self::from_bytedata_unchecked(x) })
+    }
+
     #[cfg(feature = "alloc")]
     /// Transform any borrowed data into shared data. This is useful when you wish to change the lifetime of the data.
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]

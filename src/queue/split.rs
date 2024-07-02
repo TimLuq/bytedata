@@ -1,3 +1,4 @@
+/// An iterator over chunks of a `ByteQueue` separated by a byte sequence.
 pub struct SplitOn<'a, 'b> {
     queue: &'b super::ByteQueue<'a>,
     needle: &'b [u8],
@@ -87,6 +88,7 @@ impl<'a, 'b> Iterator for SplitOn<'a, 'b> {
     }
 }
 
+/// An iterator over chunks of a `StringQueue` separated by a str sequence.
 #[repr(transparent)]
 pub struct SplitOnStr<'a, 'b> {
     inner: SplitOn<'a, 'b>,
