@@ -229,7 +229,7 @@ impl<'a> StringData<'a> {
         self
     }
 
-    /// Transform the range of bytes this `ByteData` represents.
+    /// Transform the range of bytes this `StringData` represents.
     #[inline]
     pub fn make_sliced<R: RangeBounds<usize> + SliceIndex<str, Output = str>>(
         &'_ mut self,
@@ -237,6 +237,20 @@ impl<'a> StringData<'a> {
     ) {
         let range = self.check_sliced(range);
         self.data.make_sliced(range);
+    }
+
+    /// Consume the `StringData` until the char condition is triggered.
+    #[inline]
+    pub fn take_while<F: FnMut(char) -> bool>(&mut self, mut f: F) -> StringData<'a> {
+        let Some(position) = self.as_str().find(|c| !f(c)) else {
+            return core::mem::replace(self, StringData::empty());
+        };
+        if position == 0 {
+            return StringData::empty();
+        }
+        let a = self.sliced(0..position);
+        self.make_sliced(position..);
+        a
     }
 
     /// Split the `StringData` at the given position.

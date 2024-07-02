@@ -277,8 +277,28 @@ impl<'a> ByteData<'a> {
     /// Split the `ByteData` at the given position.
     #[inline]
     pub fn take_bytes(&mut self, position: usize) -> ByteData<'a> {
+        if position == 0 {
+            return ByteData::empty();
+        }
         let a = self.sliced(0..position);
         self.make_sliced(position..);
+        a
+    }
+
+    /// Consume the `ByteData` until the byte condition is triggered.
+    pub fn take_while<F: FnMut(u8) -> bool>(&mut self, mut f: F) -> ByteData<'a> {
+        let mut i = 0;
+        while i < self.len() && f(self[i]) {
+            i += 1;
+        }
+        if i == 0 {
+            return ByteData::empty();
+        }
+        if i == self.len() {
+            return core::mem::replace(self, ByteData::empty());
+        }
+        let a = self.sliced(0..i);
+        self.make_sliced(i..);
         a
     }
 
