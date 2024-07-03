@@ -610,3 +610,10 @@ impl<'a, 'b> IntoIterator for &'b StringData<'a> {
         self.as_str().chars()
     }
 }
+
+impl<'a> core::borrow::Borrow<str> for StringData<'a> {
+    #[inline]
+    fn borrow(&self) -> &str {
+        self.as_str()
+    }
+}

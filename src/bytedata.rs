@@ -598,3 +598,10 @@ impl<'a> Iterator for ByteData<'a> {
         Some(r)
     }
 }
+
+impl<'a> core::borrow::Borrow<[u8]> for ByteData<'a> {
+    #[inline]
+    fn borrow(&self) -> &[u8] {
+        self.as_slice()
+    }
+}
