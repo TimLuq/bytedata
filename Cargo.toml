@@ -1,6 +1,6 @@
 [package]
 name = "bytedata"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2021"
 rust-version = "1.70.0"
 description = "Representation of a byte slice that is either static, borrowed, or shared."
@@ -29,6 +29,7 @@ nightly = []
 queue = []
 read_buf = ["std"]
 std = ["alloc"]
+bytes_1 = ["dep:bytes_1", "bytes_1_safe"]
 
 bytes_1_safe = ["bytes_1"]
 http-body_04 = ["dep:http-body_04", "dep:http_02", "bytes_1"]

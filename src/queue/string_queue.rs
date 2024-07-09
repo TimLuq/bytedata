@@ -36,6 +36,11 @@ impl<'a> StringQueue<'a> {
         &self.queue
     }
 
+    #[inline]
+    pub(super) fn as_bytequeue_mut(&mut self) -> &mut ByteQueue<'a> {
+        &mut self.queue
+    }
+
     /// Get the inner bytequeue.
     #[inline]
     pub const fn into_bytequeue(self) -> ByteQueue<'a> {
@@ -233,6 +238,63 @@ impl<'a> StringQueue<'a> {
         max: usize,
     ) -> super::SplitOn<'a, 'b> {
         super::SplitOn::new(self.as_bytequeue(), needle, max)
+    }
+
+    /// Split the queue on a certain byte position.
+    /// `self` will contain the beginning `[0, at)`, and the returned queue will contain the end part `[at, len)`.
+    /// If the position is in the middle of a multi-byte UTF-8 character, this will panic.
+    pub fn split_off(&mut self, at: usize) -> Self {
+        if at == self.len() {
+            return Self::new();
+        }
+        if at == 0 {
+            return core::mem::replace(self, Self::new());
+        }
+        // check if the split is in the middle of a char
+        let b = self.queue.bytes().skip(at).next().unwrap();
+        if b & 0b1100_0000 == 0b1000_0000 {
+            panic!("StringQueue: Invalid UTF-8 split at index {}", at)
+        }
+        let out = self.queue.split_off(at);
+        unsafe { Self::from_bytequeue(out) }
+    }
+
+    fn check_range(&self, range: impl core::ops::RangeBounds<usize>) -> (usize, usize) {
+        let (start, end) = self.queue.check_range(range);
+        if start == self.len() {
+            return (start, end);
+        }
+        let mut len = end - start;
+        let mut bytes = self.queue.bytes();
+        if start != 0 {
+            bytes = bytes.skip(start);
+            let b = bytes.next().unwrap();
+            if b & 0b1100_0000 == 0b1000_0000 {
+                panic!("StringQueue: Invalid UTF-8 start in range");
+            }
+            if start == end || end == self.len() {
+                return (start, end);
+            }
+            len -= 1;
+        } else if end == self.len() {
+            return (start, end);
+        }
+        let mut bytes = bytes.skip(len);
+        let b = bytes.next().unwrap();
+        if b & 0b1100_0000 == 0b1000_0000 {
+            panic!("StringQueue: Invalid UTF-8 end in range");
+        }
+        (start, end)
+    }
+
+    /// Drain a range from the queue.
+    /// Panics if the range boundary falls in the middle of a multi-byte UTF-8 character.
+    pub fn drain(
+        &mut self,
+        range: impl core::ops::RangeBounds<usize>,
+    ) -> super::DrainChars<'a, '_> {
+        let (start, end) = self.check_range(range);
+        unsafe { super::DrainChars::new(self, start, end) }
     }
 }
 

@@ -138,10 +138,9 @@ impl<'a> ByteQueue<'a> {
         }
     }
 
-    /// Return a slice of the buffer.
-    pub fn slice(&self, range: impl RangeBounds<usize>) -> Self {
-        let mut max = match range.end_bound() {
-            core::ops::Bound::Excluded(0) => return ByteQueue::new(),
+    pub(super) fn check_range(&self, range: impl RangeBounds<usize>) -> (usize, usize) {
+        let max = match range.end_bound() {
+            core::ops::Bound::Excluded(0) => 0,
             core::ops::Bound::Included(v) if *v < self.remain => *v + 1,
             core::ops::Bound::Included(v) => panic!(
                 "slicing outside of max bound `..={}` where the maximum is {}",
@@ -154,7 +153,7 @@ impl<'a> ByteQueue<'a> {
             ),
             core::ops::Bound::Unbounded => self.remain,
         };
-        let mut start = match range.start_bound() {
+        let start = match range.start_bound() {
             core::ops::Bound::Included(v) => *v,
             core::ops::Bound::Excluded(v) => *v + 1,
             core::ops::Bound::Unbounded => 0,
@@ -164,6 +163,15 @@ impl<'a> ByteQueue<'a> {
                 "slicing starting outside of maximum bound `{}..` where the maximum is {}",
                 start, self.remain
             );
+        }
+        (start, max)
+    }
+
+    /// Return a slice of the buffer.
+    pub fn slice(&self, range: impl RangeBounds<usize>) -> Self {
+        let (mut start, mut max) = self.check_range(range);
+        if max == 0 {
+            return Self::new();
         }
         max -= start;
         let mut out = Self::new();
@@ -368,6 +376,51 @@ impl<'a> ByteQueue<'a> {
     pub fn into_bytes(self) -> OwnedByteIter<'a> {
         OwnedByteIter::new(self)
     }
+
+    /// Adds another ByteQueue's chunks to this queue. May be optimized in the future.
+    #[inline]
+    pub fn append(&mut self, other: ByteQueue<'a>) {
+        // TODO: optimize by adding full regions instead of just chunks at to save on region allocations
+        self.extend(other.into_iter());
+    }
+
+    /// Split the queue at a certain index.
+    /// This will return the part of the queue after the index `[at, len)` and keep everything before the position in the original queue `[0, at)`.
+    pub fn split_off(&mut self, at: usize) -> Self {
+        let mut out = Self::new();
+        if at == 0 {
+            return core::mem::replace(self, out);
+        }
+        if at == self.len() {
+            return out;
+        }
+        if at > self.len() {
+            panic!("ByteQueue::split_off: index out of bounds");
+        }
+        let mut remain = at;
+        while let Some(a) = self.pop_back() {
+            let l = a.len();
+            if l > remain {
+                let (a, b) = a.split_at(remain);
+                self.push_back(a);
+                out.push_front(b);
+                return out;
+            }
+            remain -= l;
+            out.push_front(a);
+            if remain != 0 {
+                continue;
+            }
+            break;
+        }
+        out
+    }
+
+    /// Drain a range of bytes from the queue. The returned iterator will remove the bytes from the queue when dropped.
+    pub fn drain(&mut self, range: impl RangeBounds<usize>) -> super::DrainBytes<'a, '_> {
+        let (start, end) = self.check_range(range);
+        super::DrainBytes::new(self, start, end)
+    }
 }
 
 impl<'a> From<ByteData<'a>> for ByteQueue<'a> {
@@ -445,6 +498,16 @@ impl<'a> From<ByteQueue<'a>> for ByteData<'a> {
             out.extend_from_slice(i.as_slice());
         }
         ByteData::from_shared(out.build())
+    }
+}
+
+impl<'a> FromIterator<ByteData<'a>> for ByteQueue<'a> {
+    fn from_iter<T: IntoIterator<Item = ByteData<'a>>>(iter: T) -> Self {
+        let mut out = Self::new();
+        for i in iter {
+            out.push_back(i);
+        }
+        out
     }
 }
 

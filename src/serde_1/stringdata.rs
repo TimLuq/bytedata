@@ -31,7 +31,11 @@ impl<'de> serde::de::Deserialize<'de> for StringData<'de> {
             fn visit_str<E: serde::de::Error>(self, _v: &str) -> Result<Self::Value, E> {
                 #[cfg(feature = "chunk")]
                 if _v.len() <= 12 {
-                    return Ok(unsafe { StringData::from_bytedata_unchecked(crate::ByteData::from_chunk_slice(_v.as_bytes())) });
+                    return Ok(unsafe {
+                        StringData::from_bytedata_unchecked(crate::ByteData::from_chunk_slice(
+                            _v.as_bytes(),
+                        ))
+                    });
                 }
                 #[cfg(feature = "alloc")]
                 {

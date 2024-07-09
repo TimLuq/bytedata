@@ -12,6 +12,10 @@ impl<'a, 'b> CharIter<'a, 'b> {
             bytes: super::ByteIter::new(queue.as_bytequeue()),
         }
     }
+    #[inline]
+    pub(super) const unsafe fn from_byte_iter(bytes: super::ByteIter<'a, 'b>) -> Self {
+        Self { bytes }
+    }
 }
 
 impl<'a, 'b> Iterator for CharIter<'a, 'b> {
@@ -34,6 +38,13 @@ impl<'a, 'b> Iterator for CharIter<'a, 'b> {
             ch = (ch << 6) | (b as u32 & 0b0011_1111);
         }
         Some(unsafe { core::char::from_u32_unchecked(ch) })
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        // this is the absolute bounds where the lower bound is the number of chars if all bytes were 4 byte chars
+        // and the upper bound assumes all bytes are ASCII-7 chars.
+        let a = self.bytes.len();
+        ((a + 3) >> 2, Some(a))
     }
 }
 
