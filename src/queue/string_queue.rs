@@ -346,6 +346,20 @@ impl<'a> From<StringQueue<'a>> for StringData<'a> {
     }
 }
 
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "queue")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+impl<'a> From<StringQueue<'a>> for alloc::string::String {
+    #[inline]
+    fn from(data: StringQueue<'a>) -> Self {
+        let mut out = alloc::string::String::with_capacity(data.len());
+        for c in data.chunks() {
+            out.push_str(c.as_str());
+        }
+        out
+    }
+}
+
 impl<'a> FromIterator<StringData<'a>> for StringQueue<'a> {
     fn from_iter<T: IntoIterator<Item = StringData<'a>>>(iter: T) -> Self {
         let mut out = Self::new();
