@@ -617,3 +617,10 @@ impl<'a> core::borrow::Borrow<str> for StringData<'a> {
         self.as_str()
     }
 }
+
+impl<'a> Default for StringData<'a> {
+    #[inline]
+    fn default() -> Self {
+        StringData::empty()
+    }
+}

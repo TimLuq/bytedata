@@ -8,7 +8,7 @@ use crate::queue::ChunkIter;
 
 /// A queue of byte chunks.
 #[cfg_attr(docsrs, doc(cfg(feature = "queue")))]
-#[derive(Clone, Default)]
+#[derive(Clone)]
 #[allow(private_interfaces)]
 pub struct ByteQueue<'a> {
     pub(crate) queue: LinkedRoot<'a>,
@@ -904,5 +904,12 @@ impl core::fmt::UpperHex for ByteQueue<'_> {
             }
         }
         Ok(())
+    }
+}
+
+impl<'a> Default for ByteQueue<'a> {
+    #[inline]
+    fn default() -> Self {
+        ByteQueue::new()
     }
 }

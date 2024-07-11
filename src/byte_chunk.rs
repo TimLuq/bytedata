@@ -153,3 +153,13 @@ impl ByteChunk {
         Self::slice(self, start, end);
     }
 }
+
+impl Default for ByteChunk {
+    #[inline]
+    fn default() -> Self {
+        ByteChunk {
+            len: 0,
+            data: [0; 12],
+        }
+    }
+}

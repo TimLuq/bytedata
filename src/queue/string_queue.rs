@@ -422,6 +422,15 @@ impl core::fmt::Debug for crate::StringQueue<'_> {
     }
 }
 
+impl<'a> Default for crate::StringQueue<'a> {
+    #[inline]
+    fn default() -> Self {
+        Self {
+            queue: crate::ByteQueue::new(),
+        }
+    }
+}
+
 impl Eq for crate::StringQueue<'_> {}
 impl<'a, 'b> PartialEq<crate::StringQueue<'b>> for crate::StringQueue<'a> {
     #[inline]

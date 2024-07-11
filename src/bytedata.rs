@@ -605,3 +605,10 @@ impl<'a> core::borrow::Borrow<[u8]> for ByteData<'a> {
         self.as_slice()
     }
 }
+
+impl<'a> Default for ByteData<'a> {
+    #[inline]
+    fn default() -> Self {
+        ByteData::empty()
+    }
+}

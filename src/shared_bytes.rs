@@ -460,3 +460,9 @@ impl core::fmt::UpperHex for SharedBytes {
         Ok(())
     }
 }
+
+impl Default for SharedBytes {
+    fn default() -> Self {
+        Self::EMPTY
+    }
+}
