@@ -1,5 +1,5 @@
 #[cfg(not(feature = "bytes_1_safe"))]
-use core::sync::atomic::{AtomicPtr, AtomicU32, Ordering};
+use core::sync::atomic::{AtomicPtr, Ordering};
 
 #[cfg(not(feature = "bytes_1_safe"))]
 use alloc::vec::Vec;
@@ -13,8 +13,8 @@ use crate::SharedBytes;
 static SHARED_BYTES_BVT: super::SBytesVtable = super::SBytesVtable {
     clone: |data, ptr, len| {
         let p = data.load(Ordering::Relaxed);
-        unsafe { &mut *((p as *mut u8).offset(4) as *mut AtomicU32) }
-            .fetch_add(1, Ordering::Relaxed);
+        let meta = unsafe { &*(p as *const crate::SharedBytesMeta) };
+        meta.refcnt.fetch_add(1, Ordering::Relaxed);
         super::SBytes {
             ptr,
             len,
@@ -34,14 +34,20 @@ static SHARED_BYTES_BVT: super::SBytesVtable = super::SBytesVtable {
         }
         vec
     },
+    is_unique: |data| unsafe {
+        let p = data.load(Ordering::Relaxed);
+        let meta = &*(p as *const crate::SharedBytesMeta);
+        meta.refcnt.load(Ordering::Relaxed) == 1
+    },
     drop: |data, _ptr, _len| unsafe {
         let p = data.load(Ordering::Relaxed) as *mut u8;
-        let refcnt = &mut *(p.offset(4) as *mut AtomicU32);
-        if refcnt.fetch_sub(1, Ordering::Relaxed) == 1 {
-            let layout =
-                alloc::alloc::Layout::from_size_align(*(p as *mut u32) as usize, 4).unwrap();
-            alloc::alloc::dealloc(p, layout);
+        let meta = &*(p as *const crate::SharedBytesMeta);
+        if meta.refcnt.fetch_sub(1, Ordering::Relaxed) != 1 {
+            return;
         }
+        let layout =
+            alloc::alloc::Layout::from_size_align(meta.len as usize, meta.align()).unwrap();
+        alloc::alloc::dealloc(p, layout);
     },
 };
 
@@ -58,6 +64,10 @@ impl From<SharedBytes> for bytes::Bytes {
 #[cfg_attr(docsrs, doc(cfg(feature = "bytes_1")))]
 impl From<SharedBytes> for bytes::Bytes {
     fn from(dat: SharedBytes) -> Self {
+        if dat.len == 0 {
+            return bytes::Bytes::new();
+        }
+        let dat = core::mem::ManuallyDrop::new(dat);
         super::SBytes {
             ptr: unsafe { dat.dat.add(dat.off as usize) },
             len: dat.len as usize,

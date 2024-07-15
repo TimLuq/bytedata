@@ -2,9 +2,6 @@
 use core::sync::atomic::AtomicPtr;
 
 #[cfg(all(not(feature = "bytes_1_safe"), feature = "alloc"))]
-use alloc::vec::Vec;
-
-#[cfg(all(not(feature = "bytes_1_safe"), feature = "alloc"))]
 use ::bytes_1 as bytes;
 
 mod bytedata;
@@ -41,6 +38,7 @@ impl SBytes {
 #[allow(dead_code)]
 struct SBytesVtable {
     pub clone: unsafe fn(&AtomicPtr<()>, *const u8, usize) -> bytes::Bytes,
-    pub to_vec: unsafe fn(&AtomicPtr<()>, *const u8, usize) -> Vec<u8>,
+    pub to_vec: unsafe fn(&AtomicPtr<()>, *const u8, usize) -> alloc::vec::Vec<u8>,
+    pub is_unique: unsafe fn(&AtomicPtr<()>) -> bool,
     pub drop: unsafe fn(&mut AtomicPtr<()>, *const u8, usize),
 }

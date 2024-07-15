@@ -143,6 +143,15 @@ impl SharedBytes {
         self.len == 0
     }
 
+    /// Returns `true` if there is only a single owner of the data.
+    pub fn is_unique(&self) -> bool {
+        self.dat.is_null()
+            || unsafe {
+                let meta = &*(self.dat as *const SharedBytesMeta);
+                meta.refcnt.load(core::sync::atomic::Ordering::Relaxed) == 1
+            }
+    }
+
     /// Returns the bytes as a slice.
     pub const fn as_slice(&self) -> &[u8] {
         if self.len == 0 {
