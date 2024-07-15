@@ -1,11 +1,66 @@
-use core::{
-    ops::{Bound, Deref, Index, RangeBounds},
-    sync::atomic::AtomicU32,
-};
+use core::ops::{Bound, Deref, Index, RangeBounds};
+
+type RefCounter = core::sync::atomic::AtomicU32;
 
 use alloc::vec::Vec;
 
 use crate::SharedBytesBuilder;
+
+#[repr(C)]
+pub(crate) struct SharedBytesMeta {
+    /// The reference count of the data.
+    pub(crate) refcnt: RefCounter,
+    /// The last 3 bits are used to store the alignment of the data.
+    pub(crate) info: u8,
+    pub(crate) _reserved: [u8; 3],
+    /// The allocated length of the data, some of which may be uninitialized.
+    pub(crate) len: u32,
+}
+
+impl SharedBytesMeta {
+    #[inline]
+    pub(crate) const fn new() -> Self {
+        unsafe { core::mem::MaybeUninit::<SharedBytesMeta>::zeroed().assume_init() }.with_align(4)
+    }
+
+    #[inline]
+    pub(crate) const fn with_len(mut self, len: u32) -> Self {
+        self.len = len;
+        self
+    }
+
+    #[inline]
+    pub(crate) const fn with_align(mut self, align: usize) -> Self {
+        const S: usize = core::mem::align_of::<SharedBytesMeta>();
+        let align = if align < S { S } else { align };
+        self.info = (align >> 2).ilog2() as u8;
+        self
+    }
+
+    #[inline]
+    pub(crate) const fn with_refcount(mut self, count: u32) -> Self {
+        self.refcnt = RefCounter::new(count);
+        self
+    }
+
+    #[inline]
+    pub(crate) const fn align(&self) -> usize {
+        4usize << self.info
+    }
+
+    pub(crate) const fn compute_start_offset(align: usize) -> u32 {
+        if align >= core::mem::size_of::<SharedBytesMeta>() {
+            align as u32
+        } else {
+            let diff = core::mem::size_of::<SharedBytesMeta>() % align;
+            if diff == 0 {
+                core::mem::size_of::<SharedBytesMeta>() as u32
+            } else {
+                (core::mem::size_of::<SharedBytesMeta>() + (align - diff)) as u32
+            }
+        }
+    }
+}
 
 /// A slice of a reference-counted byte buffer.
 #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
@@ -31,22 +86,44 @@ impl SharedBytes {
     }
 
     /// Creates a `SharedBytes` from a slice of bytes.
+    #[inline]
     pub fn from_slice(dat: &[u8]) -> Self {
-        if dat.len() > 0xFFFF_FFF7 {
-            panic!("SharedBytes::from_slice: slice too large");
+        Self::from_slice_aligned(dat, core::mem::align_of::<SharedBytesMeta>())
+    }
+
+    /// Creates a `SharedBytes` from a slice of bytes and a target alignment.
+    pub fn from_slice_aligned(dat: &[u8], align: usize) -> Self {
+        if dat.is_empty() {
+            return Self::EMPTY;
         }
+        let align = core::mem::align_of::<SharedBytesMeta>().max(align);
+        let off = SharedBytesMeta::compute_start_offset(align) as usize;
+        let max_size: usize = 0xFFFF_FFFF - off;
+        assert!(
+            dat.len() <= max_size,
+            "SharedBytes::from_slice: slice too large"
+        );
         let len = dat.len() as u32;
-        let layout = alloc::alloc::Layout::from_size_align(dat.len() + 8, 4).unwrap();
+        let alloc_size = dat.len() + off;
+        let layout = alloc::alloc::Layout::from_size_align(alloc_size, align).unwrap();
         let ptr = unsafe {
             let ptr = alloc::alloc::alloc(layout);
-            (ptr as *mut u32).write_volatile(len);
-            (ptr.offset(4) as *mut u32).write_volatile(1);
-            ptr.offset(8).copy_from(dat.as_ptr(), dat.len());
+            if ptr.is_null() {
+                alloc::alloc::handle_alloc_error(layout);
+            }
+            (ptr as *mut SharedBytesMeta).write(
+                SharedBytesMeta::new()
+                    .with_len(alloc_size as u32)
+                    .with_align(align)
+                    .with_refcount(1),
+            );
+            ptr.offset(off as isize)
+                .copy_from_nonoverlapping(dat.as_ptr(), dat.len());
             ptr
         };
         Self {
             len,
-            off: 8,
+            off: off as u32,
             dat: ptr,
         }
     }
@@ -99,18 +176,21 @@ impl SharedBytes {
 
     /// Returns a new subslice of the bytes.
     pub fn sliced(&self, offset: usize, len: usize) -> Self {
-        if offset > self.len as usize {
-            panic!("SharedBytes::sliced: offset out of bounds");
-        }
-        if offset + len > self.len as usize {
-            panic!("SharedBytes::sliced: offset + len out of bounds");
-        }
+        assert!(
+            offset <= self.len as usize,
+            "SharedBytes::sliced: offset out of bounds"
+        );
+        assert!(
+            offset + len <= self.len as usize,
+            "SharedBytes::sliced: offset + len out of bounds"
+        );
         if len == 0 {
             return Self::EMPTY;
         }
         let len = len as u32;
         let off = self.off + offset as u32;
-        unsafe { &mut *(self.dat.offset(4) as *mut AtomicU32) }
+        unsafe { &*(self.dat as *const SharedBytesMeta) }
+            .refcnt
             .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
         Self {
             len,
@@ -131,20 +211,20 @@ impl SharedBytes {
             Bound::Excluded(end) => *end,
             Bound::Unbounded => self.len as usize,
         };
-        if end < start {
-            panic!("SharedBytes::sliced_range: end < start");
-        }
+        assert!(end >= start, "SharedBytes::sliced_range: end < start");
         self.sliced(start, end - start)
     }
 
     /// Restrict the region of bytes this `SharedBytes` represents.
     pub const fn into_sliced(mut self, offset: usize, len: usize) -> Self {
-        if offset > self.len as usize {
-            panic!("SharedBytes::into_sliced: offset out of bounds");
-        }
-        if offset + len > self.len as usize {
-            panic!("SharedBytes::into_sliced: offset + len out of bounds");
-        }
+        assert!(
+            offset <= self.len as usize,
+            "SharedBytes::into_sliced: offset out of bounds"
+        );
+        assert!(
+            offset + len <= self.len as usize,
+            "SharedBytes::into_sliced: offset + len out of bounds"
+        );
         self.len = len as u32;
         self.off += offset as u32;
         self
@@ -152,12 +232,14 @@ impl SharedBytes {
 
     /// Restrict the region of bytes this `SharedBytes` represents.
     pub fn make_sliced(&mut self, offset: usize, len: usize) -> &mut Self {
-        if offset > self.len as usize {
-            panic!("SharedBytes::into_sliced: offset out of bounds");
-        }
-        if offset + len > self.len as usize {
-            panic!("SharedBytes::into_sliced: offset + len out of bounds");
-        }
+        assert!(
+            offset <= self.len as usize,
+            "SharedBytes::make_sliced: offset out of bounds"
+        );
+        assert!(
+            offset + len <= self.len as usize,
+            "SharedBytes::make_sliced: offset + len out of bounds"
+        );
         self.len = len as u32;
         self.off += offset as u32;
         self
@@ -198,7 +280,8 @@ impl SharedBytes {
         if self.dat.is_null() {
             return 0;
         }
-        unsafe { &*(self.dat.offset(4) as *mut AtomicU32) }
+        unsafe { &*(self.dat as *const SharedBytesMeta) }
+            .refcnt
             .load(core::sync::atomic::Ordering::Relaxed)
     }
 }
@@ -208,7 +291,8 @@ impl Clone for SharedBytes {
         if self.len == 0 {
             return Self::EMPTY;
         }
-        unsafe { &mut *(self.dat.offset(4) as *mut AtomicU32) }
+        unsafe { &mut *(self.dat as *mut SharedBytesMeta) }
+            .refcnt
             .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
         Self {
             len: self.len,
@@ -224,13 +308,11 @@ impl Drop for SharedBytes {
             return;
         }
         unsafe {
-            let refcnt = &mut *(self.dat.offset(4) as *mut AtomicU32);
+            let meta = &*(self.dat as *const SharedBytesMeta);
+            let refcnt = &meta.refcnt;
             if refcnt.fetch_sub(1, core::sync::atomic::Ordering::Relaxed) == 1 {
-                let layout = alloc::alloc::Layout::from_size_align(
-                    *(self.dat.offset(4) as *mut u32) as usize,
-                    4,
-                )
-                .unwrap();
+                let layout =
+                    alloc::alloc::Layout::from_size_align(meta.len as usize, meta.align()).unwrap();
                 alloc::alloc::dealloc(self.dat as *mut u8, layout);
             }
             self.dat = core::ptr::null();
@@ -279,6 +361,68 @@ impl From<alloc::string::String> for SharedBytes {
     #[inline]
     fn from(dat: alloc::string::String) -> Self {
         Self::from_slice(dat.as_bytes())
+    }
+}
+
+impl<'a> From<crate::ByteData<'a>> for SharedBytes {
+    #[inline]
+    fn from(dat: crate::ByteData<'a>) -> Self {
+        match dat {
+            crate::ByteData::Shared(dat) => dat,
+            x => Self::from_slice(x.as_slice()),
+        }
+    }
+}
+
+#[cfg(feature = "queue")]
+impl<'a> From<crate::ByteQueue<'a>> for SharedBytes {
+    #[inline]
+    fn from(dat: crate::ByteQueue<'a>) -> Self {
+        crate::ByteData::from(dat).into()
+    }
+}
+
+impl From<SharedBytesBuilder> for SharedBytes {
+    #[inline]
+    fn from(dat: SharedBytesBuilder) -> Self {
+        dat.build()
+    }
+}
+
+impl From<SharedBytes> for SharedBytesBuilder {
+    #[inline]
+    fn from(mut dat: SharedBytes) -> Self {
+        if dat.dat.is_null() {
+            return SharedBytesBuilder::new();
+        }
+        let meta = unsafe { &*(dat.dat as *const SharedBytesMeta) };
+        let align = meta.align();
+        if meta.refcnt.load(core::sync::atomic::Ordering::Relaxed) == 1 {
+            let len = meta.len;
+            let dat_len = dat.len;
+            let dataptr = dat.dat as *mut u8;
+            dat.dat = core::ptr::null();
+            let start_off = SharedBytesMeta::compute_start_offset(align) as u32;
+            if dat_len != 0 && dat.off != start_off {
+                // there is a prefix of unwanted data, so we move it to the beginning
+                unsafe {
+                    let dst = dataptr.offset(start_off as isize);
+                    let src = dataptr.offset(dat.off as isize);
+                    dst.copy_from(src, dat_len as usize);
+                }
+            }
+            core::mem::forget(dat);
+            SharedBytesBuilder {
+                align,
+                off: start_off + dat_len,
+                len,
+                dat: dataptr,
+            }
+        } else {
+            let mut r = SharedBytesBuilder::with_alignment(align);
+            r.extend_from_slice(dat.as_slice());
+            r
+        }
     }
 }
 

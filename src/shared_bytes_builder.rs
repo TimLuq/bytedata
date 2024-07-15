@@ -1,49 +1,113 @@
-use crate::SharedBytes;
+use crate::{SharedBytes, SharedBytesMeta};
 
 /// A builder for `SharedBytes`.
 #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 pub struct SharedBytesBuilder {
+    /// The total capacity of the buffer.
     pub(crate) len: u32,
+    /// The offset of the first unused byte.
     pub(crate) off: u32,
+    /// Pointer to the heap buffer.
     pub(crate) dat: *mut u8,
+    /// The alignment of the buffer.
+    pub(crate) align: usize,
 }
 
 unsafe impl Send for SharedBytesBuilder {}
+unsafe impl Sync for SharedBytesBuilder {}
 
 impl SharedBytesBuilder {
     /// Creates a new `SharedBytesBuilder`.
+    #[inline]
     pub const fn new() -> Self {
         Self {
             len: 0,
-            off: 8,
+            off: core::mem::size_of::<SharedBytesMeta>() as u32,
             dat: core::ptr::null_mut(),
+            align: core::mem::align_of::<SharedBytesMeta>(),
         }
     }
 
-    /// Creates a new `SharedBytesBuilder` with the specified capacity. The maximum capacity is `0xFFFF_FFF7`.
+    /// Creates a new `SharedBytesBuilder`.
+    #[inline]
+    pub const fn with_alignment(alignment: usize) -> Self {
+        let align = alignment.next_power_of_two();
+        assert!(
+            align == alignment,
+            "SharedBytesBuilder::with_alignment: alignment must be a power of two"
+        );
+        assert!(
+            align <= 512,
+            "SharedBytesBuilder::with_alignment: alignment must be less than or equal to 512"
+        );
+        let align = if align < core::mem::align_of::<SharedBytesMeta>() {
+            core::mem::align_of::<SharedBytesMeta>()
+        } else {
+            align
+        };
+        let off = SharedBytesMeta::compute_start_offset(align);
+        Self {
+            len: 0,
+            off,
+            dat: core::ptr::null_mut(),
+            align,
+        }
+    }
+
+    /// Creates a new `SharedBytesBuilder` with at least the specified capacity. The maximum capacity is `0xFFFF_FFF0` or `isize::MAX - 15`, whichever is lower.
     #[inline]
     pub fn with_capacity(cap: usize) -> Self {
-        if cap > 0xFFFF_FFF7 {
-            panic!("SharedBytesBuilder::with_capacity: capacity too large");
-        }
         if cap == 0 {
             return Self::new();
         }
-        Self::with_capacity_u32(cap as u32)
+        Self::with_capacity_u32(cap as u32, core::mem::align_of::<SharedBytesMeta>())
     }
 
-    fn with_capacity_u32(cap: u32) -> Self {
-        let layout = alloc::alloc::Layout::from_size_align(cap as usize + 8, 4).unwrap();
+    /// Creates a new `SharedBytesBuilder` with at least the specified capacity. The maximum capacity is `0xFFFF_FFF0 - align` or `isize::MAX - 15 - align`, whichever is lower.
+    pub fn with_aligned_capacity(cap: usize, alignment: usize) -> Self {
+        const MAX_CAP: usize = if isize::BITS <= 32 {
+            isize::MAX as usize
+        } else {
+            0xFFFF_FFFF
+        };
+        let align = if alignment < core::mem::align_of::<SharedBytesMeta>() {
+            core::mem::align_of::<SharedBytesMeta>()
+        } else {
+            alignment
+        };
+        let max_cap = MAX_CAP - SharedBytesMeta::compute_start_offset(alignment) as usize;
+        assert!(
+            cap <= max_cap,
+            "SharedBytesBuilder::with_aligned_capacity: capacity too large"
+        );
+        if cap == 0 {
+            return Self::with_alignment(align);
+        }
+        let align2 = alignment.next_power_of_two();
+        assert!(
+            align2 == alignment,
+            "SharedBytesBuilder::with_aligned_capacity: alignment must be a power of two"
+        );
+        assert!(alignment <= 512, "SharedBytesBuilder::with_aligned_capacity: alignment must be less than or equal to 512");
+        Self::with_capacity_u32(cap as u32, align)
+    }
+
+    fn with_capacity_u32(cap: u32, align: usize) -> Self {
+        let off = SharedBytesMeta::compute_start_offset(align);
+        let len = cap + off;
+        let layout = alloc::alloc::Layout::from_size_align(len as usize, align).unwrap();
         let ptr = unsafe {
             let ptr = alloc::alloc::alloc(layout);
-            (ptr as *mut u32).write_volatile(cap);
-            (ptr.offset(4) as *mut u32).write_volatile(0);
+            if ptr.is_null() {
+                alloc::alloc::handle_alloc_error(layout);
+            }
             ptr
         };
         Self {
-            len: cap + 8,
-            off: 8,
+            len,
+            off,
             dat: ptr,
+            align,
         }
     }
 
@@ -82,23 +146,28 @@ impl SharedBytesBuilder {
         }
         let ptr = if self.len == 0 {
             unsafe {
-                let layout = alloc::alloc::Layout::from_size_align(new_len, 4).unwrap();
+                let layout = alloc::alloc::Layout::from_size_align(new_len, self.align).unwrap();
                 let p = alloc::alloc::alloc(layout);
-                (p.offset(4) as *mut u32).write_volatile(0);
+                if p.is_null() {
+                    alloc::alloc::handle_alloc_error(layout);
+                }
                 p
             }
         } else {
+            let start_off = SharedBytesMeta::compute_start_offset(self.align) as isize;
             unsafe {
                 let old_layout =
-                    alloc::alloc::Layout::from_size_align(self.len as usize, 4).unwrap();
+                    alloc::alloc::Layout::from_size_align(self.len as usize, self.align as usize)
+                        .unwrap();
                 let mut ptr = alloc::alloc::realloc(self.dat, old_layout, new_len);
                 if ptr.is_null() {
-                    let layout = alloc::alloc::Layout::from_size_align(new_len, 4).unwrap();
+                    let layout =
+                        alloc::alloc::Layout::from_size_align(new_len, self.align as usize)
+                            .unwrap();
                     ptr = alloc::alloc::alloc(layout);
-                    let p = alloc::alloc::alloc(layout);
-                    (p.offset(4) as *mut u32).write_volatile(0);
-                    ptr.offset(8)
-                        .copy_from(self.dat.offset(8), self.off as usize - 8);
+                    let src = self.dat.offset(start_off);
+                    let dst = ptr.offset(start_off);
+                    dst.copy_from_nonoverlapping(src, self.off as usize - start_off as usize);
                     alloc::alloc::dealloc(self.dat, old_layout);
                 }
                 ptr
@@ -113,18 +182,19 @@ impl SharedBytesBuilder {
         if dat.is_empty() {
             return;
         }
-        if dat.len() > 0xFFFF_FFF7 {
-            panic!("SharedBytesBuilder::push: slice too large");
-        }
-        let new_off = self.off as usize + dat.len();
-        if new_off > 0xFFFF_FFFF {
-            panic!("SharedBytesBuilder::push: slice too large to append to existing data");
-        }
+        let new_off = match (self.off as usize).checked_add(dat.len()) {
+            Some(new_off) if new_off <= 0xFFFF_FFFF => new_off,
+            _ => {
+                panic!("SharedBytesBuilder::extend_from_slice: slice too large to append to existing data");
+            }
+        };
 
         // reallocate if necessary
         if new_off > self.len as usize {
             let new_len = if new_off > 0x0000_8000 {
-                ((new_off & 0xFFFF_8000) + 0x0000_8000).min(0xFFFF_FFFF)
+                (new_off & 0xFFFF_8000)
+                    .saturating_add(0x0000_8000)
+                    .min(0xFFFF_FFFF)
             } else {
                 new_off.next_power_of_two()
             };
@@ -139,9 +209,30 @@ impl SharedBytesBuilder {
         self.off += dat.len() as u32;
     }
 
-    /// Freezes the builder and returns a `SharedBytes`.
+    /// Clear the buffer.
+    pub fn clear(&mut self) {
+        if self.len == 0 {
+            return;
+        }
+        let data_off = SharedBytesMeta::compute_start_offset(self.align);
+        self.off = data_off;
+    }
+
+    /// Truncates the buffer. This method does nothing if the buffer contains less than `len` bytes.
+    pub fn truncate(&mut self, len: usize) {
+        if self.len == 0 {
+            return;
+        }
+        let data_off = SharedBytesMeta::compute_start_offset(self.align).saturating_add(len as u32);
+        if self.off > data_off {
+            self.off = data_off;
+        }
+    }
+
+    /// Freezes the builder and returns a [`SharedBytes`] representing the data.
     pub fn build(self) -> SharedBytes {
-        let SharedBytesBuilder { len, off, dat } = self;
+        let slf = core::mem::ManuallyDrop::new(self);
+        let len = slf.len;
         if len == 0 {
             return SharedBytes {
                 len: 0,
@@ -149,43 +240,92 @@ impl SharedBytesBuilder {
                 dat: core::ptr::null(),
             };
         }
-        unsafe {
-            *(dat as *mut u32) = len;
-            (dat.offset(4) as *mut u32).write_volatile(1);
+        let align = slf.align;
+        let data_off = SharedBytesMeta::compute_start_offset(align);
+        let off = slf.off;
+        let dat = slf.dat;
+        if data_off == off {
+            if !dat.is_null() {
+                unsafe {
+                    let layout =
+                        alloc::alloc::Layout::from_size_align(len as usize, align).unwrap();
+                    alloc::alloc::dealloc(dat, layout);
+                }
+            }
+            return SharedBytes {
+                len: 0,
+                off: 0,
+                dat: core::ptr::null(),
+            };
         }
+        const INIT: SharedBytesMeta = SharedBytesMeta::new().with_refcount(1);
+        unsafe { (dat as *mut SharedBytesMeta).write(INIT.with_align(align).with_len(len)) };
         SharedBytes {
-            len: off - 8,
-            off: 8,
+            len: off - data_off,
+            off: data_off,
             dat,
         }
     }
 
-    /// Returns the number of bytes currently in the buffer.
+    /// Returns total the number of bytes currently available in the buffer.
+    #[inline]
+    pub const fn capacity(&self) -> usize {
+        if self.len == 0 {
+            return 0;
+        }
+        let data_off = SharedBytesMeta::compute_start_offset(self.align);
+        (self.len - data_off) as usize
+    }
+
+    /// Returns the number of bytes currently written to in the buffer.
     #[inline]
     pub const fn len(&self) -> usize {
-        self.off as usize - 8
+        let data_off = SharedBytesMeta::compute_start_offset(self.align);
+        (self.off - data_off) as usize
     }
 
     /// Returns `true` if the buffer is empty.
     #[inline]
     pub const fn is_empty(&self) -> bool {
-        self.off == 8
+        if self.len == 0 {
+            return true;
+        }
+        let data_off = SharedBytesMeta::compute_start_offset(self.align);
+        self.off == data_off
     }
 
     /// Returns the bytes as a slice.
     pub const fn as_slice(&self) -> &[u8] {
-        if self.off == 8 {
+        if self.len == 0 {
             return &[];
         }
-        unsafe { core::slice::from_raw_parts(self.dat.offset(8), self.off as usize - 8) }
+        let data_off = SharedBytesMeta::compute_start_offset(self.align);
+        if self.off == data_off {
+            return &[];
+        }
+        unsafe {
+            core::slice::from_raw_parts(
+                self.dat.offset(data_off as isize),
+                (self.off - data_off) as usize,
+            )
+        }
     }
 
     /// Returns the bytes as a mut slice.
     pub fn as_slice_mut(&mut self) -> &mut [u8] {
-        if self.off == 8 {
+        if self.len == 0 {
             return &mut [];
         }
-        unsafe { core::slice::from_raw_parts_mut(self.dat.offset(8), self.off as usize - 8) }
+        let data_off = SharedBytesMeta::compute_start_offset(self.align);
+        if self.off == data_off {
+            return &mut [];
+        }
+        unsafe {
+            core::slice::from_raw_parts_mut(
+                self.dat.offset(data_off as isize),
+                (self.off - data_off) as usize,
+            )
+        }
     }
 
     /// Apply a function to the unused reserved bytes.
@@ -195,10 +335,10 @@ impl SharedBytesBuilder {
     where
         F: FnOnce(&mut [core::mem::MaybeUninit<u8>]) -> (R, usize),
     {
-        let off = self.off as isize;
-        let data = if off == 8 {
+        let data = if self.len == 0 || self.off == self.len {
             &mut [] as &mut [core::mem::MaybeUninit<u8>]
         } else {
+            let off = self.off as isize;
             unsafe {
                 core::slice::from_raw_parts_mut(
                     self.dat.offset(off) as *mut core::mem::MaybeUninit<u8>,
@@ -221,11 +361,13 @@ impl Default for SharedBytesBuilder {
 
 impl Drop for SharedBytesBuilder {
     fn drop(&mut self) {
-        if self.len != 0 && unsafe { (self.dat.offset(4) as *mut u32).read_volatile() } == 0 {
-            unsafe {
-                let layout = alloc::alloc::Layout::from_size_align(self.len as usize, 4).unwrap();
-                alloc::alloc::dealloc(self.dat, layout);
-            }
+        if self.len == 0 {
+            return;
+        }
+        unsafe {
+            let layout =
+                alloc::alloc::Layout::from_size_align(self.len as usize, self.align).unwrap();
+            alloc::alloc::dealloc(self.dat, layout);
         }
     }
 }
@@ -336,7 +478,7 @@ impl SharedBytesBuilder {
         F: FnOnce(&mut std::io::BorrowedBuf<'this>) -> R,
     {
         let off = self.off as isize;
-        let mut bb = if off == 8 {
+        let mut bb = if self.len == 0 {
             std::io::BorrowedBuf::from(&mut [] as &mut [u8])
         } else {
             let data = unsafe { self.dat.offset(off) as *mut core::mem::MaybeUninit<u8> };
