@@ -100,7 +100,7 @@ impl<'a> ByteData<'a> {
         }
         #[cfg(feature = "chunk")]
         if dat.len() <= 12 {
-            return Self::Chunk(crate::byte_chunk::ByteChunk::from_slice(&dat));
+            return Self::Chunk(crate::byte_chunk::ByteChunk::from_slice(dat.as_slice()));
         }
         Self::Shared(dat.into())
     }
@@ -196,7 +196,19 @@ impl<'a> ByteData<'a> {
             #[cfg(feature = "chunk")]
             Self::Chunk(dat) => Self::Chunk(dat.sliced(range)),
             #[cfg(feature = "alloc")]
-            Self::Shared(dat) => Self::Shared(dat.sliced_range(range)),
+            Self::Shared(dat) => {
+                let dat = dat.sliced_range(range);
+                if dat.is_empty() {
+                    return ByteData::empty();
+                }
+                #[cfg(feature = "chunk")]
+                if dat.len() <= 12 {
+                    return ByteData::Chunk(crate::byte_chunk::ByteChunk::from_slice(
+                        dat.as_slice(),
+                    ));
+                }
+                Self::Shared(dat)
+            }
         }
     }
 
@@ -211,7 +223,19 @@ impl<'a> ByteData<'a> {
             #[cfg(feature = "chunk")]
             Self::Chunk(dat) => Self::Chunk(dat.sliced(range)),
             #[cfg(feature = "alloc")]
-            Self::Shared(dat) => Self::Shared(dat.into_sliced_range(range)),
+            Self::Shared(dat) => {
+                let dat = dat.into_sliced_range(range);
+                if dat.is_empty() {
+                    return ByteData::empty();
+                }
+                #[cfg(feature = "chunk")]
+                if dat.len() <= 12 {
+                    return ByteData::Chunk(crate::byte_chunk::ByteChunk::from_slice(
+                        dat.as_slice(),
+                    ));
+                }
+                Self::Shared(dat)
+            }
         }
     }
 
@@ -228,6 +252,16 @@ impl<'a> ByteData<'a> {
             #[cfg(feature = "alloc")]
             Self::Shared(dat) => {
                 dat.make_sliced_range(range);
+                if dat.is_empty() {
+                    *self = ByteData::empty();
+                } else {
+                    #[cfg(feature = "chunk")]
+                    if dat.len() <= 12 {
+                        *self = ByteData::Chunk(crate::byte_chunk::ByteChunk::from_slice(
+                            dat.as_slice(),
+                        ));
+                    }
+                }
             }
         }
     }
@@ -245,6 +279,10 @@ impl<'a> ByteData<'a> {
             Self::Static(dat) => ByteData::Static(dat),
             #[cfg(feature = "chunk")]
             Self::Chunk(dat) => ByteData::Chunk(dat),
+            #[cfg(feature = "chunk")]
+            Self::Shared(dat) if dat.len() <= 12 => {
+                ByteData::Chunk(crate::byte_chunk::ByteChunk::from_slice(dat.as_slice()))
+            }
             Self::Shared(dat) => ByteData::Shared(dat),
         }
     }
@@ -267,7 +305,19 @@ impl<'a> ByteData<'a> {
                 }
                 ByteData::Shared(SharedBytes::from_slice(dat))
             }
-            Self::Shared(dat) => ByteData::Shared(dat.into_sliced_range(range)),
+            Self::Shared(dat) => {
+                let dat = dat.into_sliced_range(range);
+                if dat.is_empty() {
+                    return ByteData::empty();
+                }
+                #[cfg(feature = "chunk")]
+                if dat.len() <= 12 {
+                    return ByteData::Chunk(crate::byte_chunk::ByteChunk::from_slice(
+                        dat.as_slice(),
+                    ));
+                }
+                ByteData::Shared(dat)
+            }
             Self::Static(dat) => ByteData::Static(&dat[range]),
             #[cfg(feature = "chunk")]
             Self::Chunk(dat) => ByteData::Chunk(dat.into_sliced(range)),
@@ -410,6 +460,13 @@ impl<'a> From<&'a [u8]> for ByteData<'a> {
 impl<'a> From<SharedBytes> for ByteData<'a> {
     #[inline]
     fn from(dat: SharedBytes) -> Self {
+        if dat.is_empty() {
+            return Self::Static(&[]);
+        }
+        #[cfg(feature = "chunk")]
+        if dat.len() <= 12 {
+            return Self::Chunk(crate::byte_chunk::ByteChunk::from_slice(&dat));
+        }
         Self::from_shared(dat)
     }
 }
