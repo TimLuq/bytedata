@@ -177,6 +177,28 @@ impl<'a> StringData<'a> {
         crate::const_starts_with(self.as_bytes(), needle.as_bytes())
     }
 
+    /// Trim whitespace from the beginning and end of the `StringData`.
+    pub fn trim(&self) -> StringData<'a> {
+        let a = self.as_str().trim();
+        let start = a.as_ptr() as usize - self.as_str().as_ptr() as usize;
+        let end = start + a.len();
+        self.sliced(start..end)
+    }
+
+    /// Trim whitespace from the beginning of the `StringData`.
+    pub fn trim_start(&self) -> StringData<'a> {
+        let a = self.as_str().trim_start();
+        let start = a.as_ptr() as usize - self.as_str().as_ptr() as usize;
+        let end = start + a.len();
+        self.sliced(start..end)
+    }
+
+    /// Trim whitespace from the end of the `StringData`.
+    pub fn trim_end(&self) -> StringData<'a> {
+        let a = self.as_str().trim_end();
+        self.sliced(0..a.len())
+    }
+
     fn check_sliced<R: RangeBounds<usize> + SliceIndex<str, Output = str>>(
         &self,
         range: R,
