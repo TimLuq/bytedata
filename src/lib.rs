@@ -278,10 +278,7 @@ pub const fn const_split_once_byte(haystack: &'_ [u8], needle: u8) -> Option<(&'
 
 /// Helper function to find the first position of a subsequence of bytes.
 /// Time complexity `O(n*m)`.
-pub const fn const_find_bytes(
-    haystack: &[u8],
-    needle: &[u8],
-) -> Option<usize> {
+pub const fn const_find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     let mut p = 0;
     if needle.len() > haystack.len() {
         return None;
@@ -312,8 +309,7 @@ pub const fn const_split_once_bytes<'a>(
         return None;
     };
     let a = unsafe { core::slice::from_raw_parts(haystack.as_ptr(), p) };
-    let hs =
-        unsafe { core::slice::from_raw_parts(haystack.as_ptr().add(p), haystack.len() - p) };
+    let hs = unsafe { core::slice::from_raw_parts(haystack.as_ptr().add(p), haystack.len() - p) };
     return Some((a, hs));
 }
 

@@ -119,7 +119,9 @@ impl SharedBytesBuilder {
             return;
         }
         let new_len = if off >= 0x0000_8000 {
-            (off & 0xFFFF_8000).saturating_add(0x0000_8000).min(0xFFFF_FFFF)
+            (off & 0xFFFF_8000)
+                .saturating_add(0x0000_8000)
+                .min(0xFFFF_FFFF)
         } else {
             (off + 7).next_power_of_two()
         };
@@ -135,7 +137,9 @@ impl SharedBytesBuilder {
         }
         let new_off = off.saturating_add(additional);
         let new_len = if new_off >= 0x0000_8000 {
-            (new_off & 0xFFFF_8000).saturating_add(0x0000_8000).min(0xFFFF_FFFF)
+            (new_off & 0xFFFF_8000)
+                .saturating_add(0x0000_8000)
+                .min(0xFFFF_FFFF)
         } else {
             new_off.next_power_of_two()
         };
