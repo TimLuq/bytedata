@@ -132,6 +132,7 @@ pub const fn const_ends_with(haystack: &[u8], needle: &[u8]) -> bool {
 
 /// Helper function for slicing slices in a `const` context.
 /// Can be used to replace [`slice::get`](https://doc.rust-lang.org/core/primitive.slice.html#method.get) or brackets (such as in `b[1..4]`).
+#[inline]
 pub const fn const_slice(a: &'_ [u8], range: core::ops::Range<usize>) -> Option<&'_ [u8]> {
     let start = range.start;
     let end = range.end;
@@ -195,6 +196,7 @@ impl<'a> StrSliceResult<'a> {
 
 /// Helper function for slicing `str`s in a `const` context.
 /// Can be used to replace [`str::get`](https://doc.rust-lang.org/core/primitive.str.html#method.get) or brackets (such as in `s[1..4]`).
+#[inline]
 pub const fn const_slice_str(a: &'_ str, range: core::ops::Range<usize>) -> StrSliceResult<'_> {
     let a = a.as_bytes();
     let start = range.start;
@@ -217,6 +219,7 @@ pub const fn const_slice_str(a: &'_ str, range: core::ops::Range<usize>) -> StrS
 }
 
 /// Simple helper function to return a constant string or a default string.
+#[inline]
 pub const fn const_or_str<'a>(value: Option<&'a str>, default: &'a str) -> &'a str {
     match value {
         Some(value) => value,
@@ -225,6 +228,7 @@ pub const fn const_or_str<'a>(value: Option<&'a str>, default: &'a str) -> &'a s
 }
 
 /// Simple helper function to return a constant byte sequence or a default sequence.
+#[inline]
 pub const fn const_or_bytes<'a>(value: Option<&'a [u8]>, default: &'a [u8]) -> &'a [u8] {
     match value {
         Some(value) => value,
@@ -272,12 +276,12 @@ pub const fn const_split_once_byte(haystack: &'_ [u8], needle: u8) -> Option<(&'
     None
 }
 
-/// Helper function to split a constant sequence of bytes on a specific sequence of bytes.
-/// The matching bytes will still be there in the second slice.
-pub const fn const_split_once_bytes<'a>(
-    haystack: &'a [u8],
-    needle: &'_ [u8],
-) -> Option<(&'a [u8], &'a [u8])> {
+/// Helper function to find the first position of a subsequence of bytes.
+/// Time complexity `O(n*m)`.
+pub const fn const_find_bytes(
+    haystack: &[u8],
+    needle: &[u8],
+) -> Option<usize> {
     let mut p = 0;
     if needle.len() > haystack.len() {
         return None;
@@ -292,21 +296,38 @@ pub const fn const_split_once_bytes<'a>(
             }
             return None;
         }
-        let a = unsafe { core::slice::from_raw_parts(haystack.as_ptr(), p) };
-        let hs =
-            unsafe { core::slice::from_raw_parts(haystack.as_ptr().add(p), haystack.len() - p) };
-        return Some((a, hs));
+        return Some(p);
     }
+}
+
+/// Helper function to split a constant sequence of bytes on a specific sequence of bytes.
+/// The matching bytes will still be there in the second slice.
+/// Time complexity `O(n*m)`.
+#[inline]
+pub const fn const_split_once_bytes<'a>(
+    haystack: &'a [u8],
+    needle: &'_ [u8],
+) -> Option<(&'a [u8], &'a [u8])> {
+    let Some(p) = const_find_bytes(haystack, needle) else {
+        return None;
+    };
+    let a = unsafe { core::slice::from_raw_parts(haystack.as_ptr(), p) };
+    let hs =
+        unsafe { core::slice::from_raw_parts(haystack.as_ptr().add(p), haystack.len() - p) };
+    return Some((a, hs));
 }
 
 /// Helper function to split a constant str of bytes on a specific substring.
 /// The matching substring will still be there in the second string.
+/// Time complexity `O(n*m)`.
+#[inline]
 pub const fn const_split_once_str<'a>(
     haystack: &'a str,
     needle: &'_ str,
 ) -> Option<(&'a str, &'a str)> {
     match const_split_once_bytes(haystack.as_bytes(), needle.as_bytes()) {
         Some((a, b)) => unsafe {
+            // if the haystack and needle is safe, this is safe
             Some((
                 core::str::from_utf8_unchecked(a),
                 core::str::from_utf8_unchecked(b),
