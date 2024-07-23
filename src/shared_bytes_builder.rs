@@ -112,32 +112,34 @@ impl SharedBytesBuilder {
     }
 
     #[cfg_attr(not(feature = "bytes_1"), allow(dead_code))]
+    #[inline]
     pub(crate) fn reserve_extra(&mut self) {
         let off = self.off as usize;
         if off == 0xFFFF_FFFF {
             return;
         }
         let new_len = if off >= 0x0000_8000 {
-            (off & 0xFFFF_8000) + 0x0000_8000
+            (off & 0xFFFF_8000).saturating_add(0x0000_8000).min(0xFFFF_FFFF)
         } else {
             (off + 7).next_power_of_two()
         };
-        self.reserve_exact(new_len.min(0xFFFF_FFFF));
+        self.reserve_exact(new_len);
     }
 
-    #[cfg_attr(not(feature = "bytes_1"), allow(dead_code))]
-    pub(crate) fn reserve(&mut self, additional: usize) {
+    /// Reserves capacity for at least `additional` more bytes to be written to the buffer.
+    #[inline]
+    pub fn reserve(&mut self, additional: usize) {
         let off = self.off as usize;
-        if off == 0xFFFF_FFFF {
+        if off == 0xFFFF_FFFF || additional == 0 {
             return;
         }
-        let new_off = off + additional;
+        let new_off = off.saturating_add(additional);
         let new_len = if new_off >= 0x0000_8000 {
-            (new_off & 0xFFFF_8000) + 0x0000_8000
+            (new_off & 0xFFFF_8000).saturating_add(0x0000_8000).min(0xFFFF_FFFF)
         } else {
             new_off.next_power_of_two()
         };
-        self.reserve_exact(new_len.min(0xFFFF_FFFF));
+        self.reserve_exact(new_len);
     }
 
     pub(crate) fn reserve_exact(&mut self, new_len: usize) {
