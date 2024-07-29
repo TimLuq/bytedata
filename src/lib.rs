@@ -20,7 +20,10 @@
 
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
-#![cfg_attr(all(feature = "nightly", feature = "read_buf"), feature(read_buf))]
+#![cfg_attr(
+    all(feature = "nightly", feature = "core_io_borrowed_buf"),
+    feature(core_io_borrowed_buf)
+)]
 #![deny(missing_docs)]
 
 #[cfg(feature = "alloc")]
@@ -62,8 +65,10 @@ mod byte_chunk;
 pub use byte_chunk::ByteChunk;
 
 #[cfg(feature = "queue")]
+#[cfg_attr(docsrs, doc(cfg(feature = "queue")))]
 pub mod queue;
 #[cfg(feature = "queue")]
+#[cfg_attr(docsrs, doc(cfg(feature = "queue")))]
 pub use queue::{ByteQueue, StringQueue};
 
 #[cfg(feature = "bytes_1")]
@@ -310,7 +315,7 @@ pub const fn const_split_once_bytes<'a>(
     };
     let a = unsafe { core::slice::from_raw_parts(haystack.as_ptr(), p) };
     let hs = unsafe { core::slice::from_raw_parts(haystack.as_ptr().add(p), haystack.len() - p) };
-    return Some((a, hs));
+    Some((a, hs))
 }
 
 /// Helper function to split a constant str of bytes on a specific substring.

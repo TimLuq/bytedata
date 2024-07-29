@@ -146,7 +146,7 @@ impl<'a, 'b> nom::FindToken<&'b char> for crate::StringQueue<'a> {
 }
 
 #[cfg(feature = "alloc")]
-impl<'a, 'b> nom::HexDisplay for crate::StringQueue<'a> {
+impl<'a> nom::HexDisplay for crate::StringQueue<'a> {
     fn to_hex(&self, chunk_size: usize) -> alloc::string::String {
         nom::HexDisplay::to_hex(self.as_bytequeue(), chunk_size)
     }
@@ -215,7 +215,6 @@ impl<'a> nom::InputTakeAtPosition for crate::StringQueue<'a> {
     {
         let a = self
             .chars_indecies()
-            .map(|(i, c)| (i, c))
             .find(|(_, c)| predicate(*c))
             .map(|(i, _)| i);
         if let Some(a) = a {
@@ -235,7 +234,6 @@ impl<'a> nom::InputTakeAtPosition for crate::StringQueue<'a> {
     {
         let a = self
             .chars_indecies()
-            .map(|(i, c)| (i, c))
             .find(|(_, c)| predicate(*c))
             .map(|(i, _)| i);
         match a {
@@ -254,7 +252,6 @@ impl<'a> nom::InputTakeAtPosition for crate::StringQueue<'a> {
     {
         let a = self
             .chars_indecies()
-            .map(|(i, c)| (i, c))
             .find(|(_, c)| predicate(*c))
             .map(|(i, _)| i);
         if let Some(a) = a {
@@ -274,7 +271,6 @@ impl<'a> nom::InputTakeAtPosition for crate::StringQueue<'a> {
     {
         let a = self
             .chars_indecies()
-            .map(|(i, c)| (i, c))
             .find(|(_, c)| predicate(*c))
             .map(|(i, _)| i);
         match a {

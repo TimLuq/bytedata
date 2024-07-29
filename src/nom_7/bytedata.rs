@@ -112,7 +112,7 @@ impl<'a, 'b> nom::FindToken<&'b char> for crate::ByteData<'a> {
 }
 
 #[cfg(feature = "alloc")]
-impl<'a, 'b> nom::HexDisplay for crate::ByteData<'a> {
+impl<'a> nom::HexDisplay for crate::ByteData<'a> {
     fn to_hex(&self, chunk_size: usize) -> alloc::string::String {
         nom::HexDisplay::to_hex(self.as_slice(), chunk_size)
     }
@@ -176,12 +176,10 @@ impl<'a> nom::InputTakeAtPosition for crate::ByteData<'a> {
         P: Fn(Self::Item) -> bool,
     {
         let a = self.as_slice();
-        let mut i = 0;
-        for b in a {
+        for (i, b) in a.iter().enumerate() {
             if predicate(*b) {
                 return Ok((self.sliced(i..), self.sliced(..i)));
             }
-            i += 1;
         }
         Err(nom::Err::Incomplete(nom::Needed::new(1)))
     }
@@ -195,15 +193,13 @@ impl<'a> nom::InputTakeAtPosition for crate::ByteData<'a> {
         P: Fn(Self::Item) -> bool,
     {
         let a = self.as_slice();
-        let mut i = 0;
-        for b in a {
+        for (i, b) in a.iter().enumerate() {
             if predicate(*b) {
                 if i == 0 {
                     return Err(nom::Err::Failure(E::from_error_kind(self.clone(), e)));
                 }
                 return Ok((self.sliced(i..), self.sliced(..i)));
             }
-            i += 1;
         }
         Err(nom::Err::Incomplete(nom::Needed::new(1)))
     }
@@ -216,12 +212,10 @@ impl<'a> nom::InputTakeAtPosition for crate::ByteData<'a> {
         P: Fn(Self::Item) -> bool,
     {
         let a = self.as_slice();
-        let mut i = 0;
-        for b in a {
+        for (i, b) in a.iter().enumerate() {
             if predicate(*b) {
                 return Ok((self.sliced(i..), self.sliced(..i)));
             }
-            i += 1;
         }
         Ok((Self::empty(), self.clone()))
     }
@@ -235,15 +229,13 @@ impl<'a> nom::InputTakeAtPosition for crate::ByteData<'a> {
         P: Fn(Self::Item) -> bool,
     {
         let a = self.as_slice();
-        let mut i = 0;
-        for b in a {
+        for (i, b) in a.iter().enumerate() {
             if predicate(*b) {
                 if i == 0 {
                     return Err(nom::Err::Failure(E::from_error_kind(self.clone(), e)));
                 }
                 return Ok((self.sliced(i..), self.sliced(..i)));
             }
-            i += 1;
         }
         Ok((Self::empty(), self.clone()))
     }

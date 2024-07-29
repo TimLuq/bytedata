@@ -150,7 +150,7 @@ impl<'a, 'b> nom::FindToken<&'b char> for crate::StringData<'a> {
 }
 
 #[cfg(feature = "alloc")]
-impl<'a, 'b> nom::HexDisplay for crate::StringData<'a> {
+impl<'a> nom::HexDisplay for crate::StringData<'a> {
     fn to_hex(&self, chunk_size: usize) -> alloc::string::String {
         nom::HexDisplay::to_hex(self.as_str(), chunk_size)
     }

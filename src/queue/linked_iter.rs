@@ -46,7 +46,16 @@ impl<'a: 'b, 'b> LinkedIter<'a, 'b> {
     }
 
     /// Skips the next `n` items.
-    pub fn skip(mut self, mut n: usize) -> Self {
+    #[inline]
+    pub fn skip(mut self, n: usize) -> Self {
+        if n != 0 {
+            self.skip_mut(n);
+        }
+        self
+    }
+
+    /// Skips the next `n` items.
+    pub fn skip_mut(&mut self, mut n: usize) -> &mut Self {
         if n == 0 {
             return self;
         }
@@ -141,6 +150,24 @@ impl<'a: 'b, 'b> Iterator for LinkedIter<'a, 'b> {
     fn count(self) -> usize {
         self.item_len()
     }
+
+    #[inline]
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        if n != 0 {
+            self.skip_mut(n);
+        }
+        self.next()
+    }
+
+    #[inline]
+    fn last(mut self) -> Option<Self::Item> {
+        let len = self.item_len();
+        if len == 0 {
+            return None;
+        }
+        self.skip_mut(len - 1);
+        self.next()
+    }
 }
 
 impl<'a: 'b, 'b> ExactSizeIterator for LinkedIter<'a, 'b> {
@@ -148,3 +175,65 @@ impl<'a: 'b, 'b> ExactSizeIterator for LinkedIter<'a, 'b> {
         self.item_len()
     }
 }
+
+impl<'a: 'b, 'b> core::iter::FusedIterator for LinkedIter<'a, 'b> {}
+
+/// An iterator over string chunks.
+#[repr(transparent)]
+pub struct LinkedStrIter<'a: 'b, 'b> {
+    inner: LinkedIter<'a, 'b>,
+}
+
+impl<'a: 'b, 'b> LinkedStrIter<'a, 'b> {
+    #[inline]
+    pub(super) const unsafe fn new(inner: LinkedIter<'a, 'b>) -> Self {
+        Self { inner }
+    }
+}
+
+impl<'a: 'b, 'b> Iterator for LinkedStrIter<'a, 'b> {
+    type Item = &'b crate::StringData<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.inner
+            .next()
+            .map(|v| unsafe { &*(v as *const crate::ByteData<'a> as *const crate::StringData<'a>) })
+    }
+
+    #[inline]
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let len = self.inner.item_len();
+        (len, Some(len))
+    }
+
+    #[inline]
+    fn count(self) -> usize {
+        self.inner.item_len()
+    }
+
+    #[inline]
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        if n != 0 {
+            self.inner.skip_mut(n);
+        }
+        self.next()
+    }
+
+    #[inline]
+    fn last(mut self) -> Option<Self::Item> {
+        let len = self.inner.item_len();
+        if len == 0 {
+            return None;
+        }
+        self.inner.skip_mut(len - 1);
+        self.next()
+    }
+}
+
+impl<'a: 'b, 'b> ExactSizeIterator for LinkedStrIter<'a, 'b> {
+    fn len(&self) -> usize {
+        self.inner.item_len()
+    }
+}
+
+impl<'a: 'b, 'b> core::iter::FusedIterator for LinkedStrIter<'a, 'b> {}

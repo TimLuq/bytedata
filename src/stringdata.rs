@@ -25,7 +25,7 @@ impl<'a> StringData<'a> {
     #[inline]
     pub const fn empty() -> Self {
         StringData {
-            data: ByteData::Static(&[]),
+            data: ByteData::empty(),
         }
     }
 
@@ -33,7 +33,7 @@ impl<'a> StringData<'a> {
     #[inline]
     pub const fn from_static(dat: &'static str) -> Self {
         StringData {
-            data: ByteData::Static(dat.as_bytes()),
+            data: ByteData::from_static(dat.as_bytes()),
         }
     }
 
@@ -41,7 +41,7 @@ impl<'a> StringData<'a> {
     #[inline]
     pub const fn from_borrowed(dat: &'a str) -> Self {
         StringData {
-            data: ByteData::Borrowed(dat.as_bytes()),
+            data: ByteData::from_borrowed(dat.as_bytes()),
         }
     }
 
@@ -53,7 +53,7 @@ impl<'a> StringData<'a> {
             return Err(dat);
         }
         Ok(StringData {
-            data: ByteData::Shared(dat),
+            data: ByteData::from_shared(dat),
         })
     }
 
@@ -71,7 +71,7 @@ impl<'a> StringData<'a> {
     ///
     /// The data must be valid UTF-8.
     /// Otherwise, the behavior is undefined for any context using the value.
-    /// Prefer [`try_from_bytedata`] if you are unsure.
+    /// Prefer [`StringData::try_from_bytedata`] if you are unsure.
     #[inline]
     pub const unsafe fn from_bytedata_unchecked(dat: ByteData<'a>) -> Self {
         StringData { data: dat }
@@ -93,9 +93,7 @@ impl<'a> StringData<'a> {
     /// Creates a `StringData` from a `String`.
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     pub fn from_owned(dat: String) -> Self {
-        StringData {
-            data: ByteData::Shared(dat.into_bytes().into()),
-        }
+        StringData { data: dat.into() }
     }
 
     #[cfg(feature = "alloc")]
@@ -133,14 +131,7 @@ impl<'a> StringData<'a> {
     /// Returns the length of the underlying byte slice.
     #[inline]
     pub const fn len(&self) -> usize {
-        match &self.data {
-            ByteData::Static(dat) => dat.len(),
-            ByteData::Borrowed(dat) => dat.len(),
-            #[cfg(feature = "chunk")]
-            ByteData::Chunk(dat) => dat.len(),
-            #[cfg(feature = "alloc")]
-            ByteData::Shared(dat) => dat.len(),
-        }
+        self.data.len()
     }
 
     /// Returns `true` if the underlying byte slice is empty.

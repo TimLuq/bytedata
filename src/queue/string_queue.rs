@@ -70,19 +70,15 @@ impl<'a> StringQueue<'a> {
     /// Pop the first item from the queue.
     #[inline]
     pub fn pop_front(&mut self) -> Option<StringData<'a>> {
-        match self.queue.pop_front() {
-            Some(v) => Some(unsafe { StringData::from_bytedata_unchecked(v) }),
-            None => None,
-        }
+        let v = self.queue.pop_front()?;
+        Some(unsafe { StringData::from_bytedata_unchecked(v) })
     }
 
     /// Pop the last item from the queue.
     #[inline]
     pub fn pop_back(&mut self) -> Option<StringData<'a>> {
-        match self.queue.pop_back() {
-            Some(v) => Some(unsafe { StringData::from_bytedata_unchecked(v) }),
-            None => None,
-        }
+        let v = self.queue.pop_back()?;
+        Some(unsafe { StringData::from_bytedata_unchecked(v) })
     }
 
     /// Get the first chunk in the queue.
@@ -210,10 +206,8 @@ impl<'a> StringQueue<'a> {
     }
 
     /// Iterates over each chunk of string data in the queue.
-    pub fn chunks(&self) -> impl Iterator<Item = &'_ StringData<'a>> + ExactSizeIterator + '_ {
-        self.queue.chunks().map(|v| unsafe {
-            core::mem::transmute::<&crate::ByteData<'a>, &crate::StringData<'a>>(v)
-        })
+    pub fn chunks(&self) -> super::LinkedStrIter<'a, '_> {
+        unsafe { super::LinkedStrIter::new(self.queue.chunks()) }
     }
 
     /// Split the queue on a certain str sequence.
@@ -251,7 +245,7 @@ impl<'a> StringQueue<'a> {
             return core::mem::replace(self, Self::new());
         }
         // check if the split is in the middle of a char
-        let b = self.queue.bytes().skip(at).next().unwrap();
+        let b = self.queue.bytes().skip_mut(at).next().unwrap();
         if b & 0b1100_0000 == 0b1000_0000 {
             panic!("StringQueue: Invalid UTF-8 split at index {}", at)
         }
@@ -481,13 +475,13 @@ impl<'a, 'b> PartialEq<crate::StringQueue<'b>> for crate::ByteData<'a> {
 impl<'a, 'b> PartialEq<&'b str> for crate::StringQueue<'a> {
     #[inline]
     fn eq(&self, other: &&'b str) -> bool {
-        &self.queue == *other
+        self.queue == **other
     }
 }
 impl<'a> PartialEq<str> for crate::StringQueue<'a> {
     #[inline]
     fn eq(&self, other: &str) -> bool {
-        &self.queue == other
+        self.queue == other
     }
 }
 impl<'a> PartialEq<crate::StringQueue<'a>> for str {
@@ -497,15 +491,21 @@ impl<'a> PartialEq<crate::StringQueue<'a>> for str {
     }
 }
 
-impl<'a, 'b> PartialEq<[u8]> for crate::StringQueue<'a> {
+impl<'a> PartialEq<[u8]> for crate::StringQueue<'a> {
     #[inline]
     fn eq(&self, other: &[u8]) -> bool {
-        &self.queue == other
+        self.queue == other
     }
 }
 impl<'a> PartialEq<crate::StringQueue<'a>> for [u8] {
     #[inline]
     fn eq(&self, other: &crate::StringQueue<'a>) -> bool {
         self == &other.queue
+    }
+}
+impl<'a, 'b> PartialEq<&'b [u8]> for crate::StringQueue<'a> {
+    #[inline]
+    fn eq(&self, other: &&'b [u8]) -> bool {
+        self.queue == **other
     }
 }

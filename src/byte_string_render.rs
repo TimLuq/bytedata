@@ -1,6 +1,10 @@
 /// Helper wrapper to render a byte slice as a bytestring similar to [`core::ascii::escape_default`].
 ///
-/// ```ignore
+#[cfg_attr(feature = "alloc", doc = "```")]
+#[cfg_attr(not(feature = "alloc"), doc = "```ignore")]
+/// # extern crate alloc;
+/// # use alloc::format;
+/// # use bytedata::ByteStringRender;
 /// format!("{}", ByteStringRender::from_slice(b"Hello,\nWorld!"));
 /// // => "Hello,\\nWorld!"
 /// format!("{:?}", ByteStringRender::from_slice(b"Hello,\nWorld!"));
@@ -77,10 +81,14 @@ impl<'a> core::fmt::Display for ByteStringRender<'a> {
 
 /// Helper wrapper to render a byte slice as a bytestring similar to [`core::ascii::escape_default`].
 ///
-/// ```ignore
-/// format!("{}", MultiByteStringRender::new(&[b"Hello,\nWorld!"]));
+#[cfg_attr(feature = "alloc", doc = "```")]
+#[cfg_attr(not(feature = "alloc"), doc = "```ignore")]
+/// # extern crate alloc;
+/// # use alloc::format;
+/// # use bytedata::MultiByteStringRender;
+/// format!("{}", MultiByteStringRender::new(&[b"Hello,\n".as_slice(), b"World!"]));
 /// // => "Hello,\\nWorld!"
-/// format!("{:?}", MultiByteStringRender::new(&[b"Hello,\nWorld!"]));
+/// format!("{:?}", MultiByteStringRender::new(&[b"Hello,\n".as_slice(), b"World!"]));
 /// // => "b\"Hello,\\nWorld!\""
 /// ```
 pub struct MultiByteStringRender<'a, T, R> {
@@ -92,7 +100,7 @@ impl<'a, T, R: AsRef<[u8]>> MultiByteStringRender<'a, T, R>
 where
     &'a T: IntoIterator<Item = R>,
 {
-    /// Create a new `ByteStringRender` from a byte slice.
+    /// Create a new `MultiByteStringRender` from an iterator over byte slices.
     pub const fn new(inner: &'a T) -> Self {
         Self {
             inner,

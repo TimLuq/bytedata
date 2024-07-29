@@ -229,7 +229,7 @@ impl<'a> ByteQueue<'a> {
             if l - index >= data.len() {
                 return &s[index..index + data.len()] == data;
             }
-            if &s[index..] != &data[..l - index] {
+            if s[index..] != data[..l - index] {
                 return false;
             }
             data = &data[l - index..];
@@ -368,7 +368,7 @@ impl<'a> ByteQueue<'a> {
     /// Iterates over each byte in the queue.
     #[inline]
     pub fn bytes(&self) -> ByteIter<'a, '_> {
-        ByteIter::new(&self)
+        ByteIter::new(self)
     }
 
     /// Iterates over each byte in the queue.

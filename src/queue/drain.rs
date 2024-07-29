@@ -27,7 +27,7 @@ impl<'a, 'b> Drop for DrainBytes<'a, 'b> {
         if self.start == self.end {
             return;
         }
-        core::mem::drop(self.queue.take());
+        _ = self.queue.take();
         let queue = unsafe { &mut *self.ptr };
         do_drain(queue, self.start, self.end);
     }
@@ -100,7 +100,7 @@ impl<'a, 'b> Drop for DrainChars<'a, 'b> {
         if self.start == self.end {
             return;
         }
-        core::mem::drop(self.queue.take());
+        _ = self.queue.take();
         let queue = unsafe { &mut *self.ptr };
         do_drain(queue.as_bytequeue_mut(), self.start, self.end);
     }

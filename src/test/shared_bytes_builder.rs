@@ -1,5 +1,5 @@
 #[test]
-fn test_shared_bytes_from_slice() {
+fn test_shared_bytes_builder_from_slice() {
     let data = b"hello world".as_slice();
     let data2 = b"2".as_slice();
     let mut s0 = crate::shared_bytes::SharedBytes::builder();
@@ -24,7 +24,7 @@ fn test_shared_bytes_from_slice() {
 }
 
 #[test]
-fn test_shared_bytes_from_aligned_slice() {
+fn test_shared_bytes_builder_from_aligned_slice() {
     let data = b"hello world".as_slice();
     let data2 = b"2".as_slice();
     let mut s0 = crate::shared_bytes_builder::SharedBytesBuilder::with_alignment(8);

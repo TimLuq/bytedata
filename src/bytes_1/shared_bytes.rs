@@ -69,9 +69,9 @@ impl From<SharedBytes> for bytes::Bytes {
         }
         let dat = core::mem::ManuallyDrop::new(dat);
         super::SBytes {
-            ptr: unsafe { dat.dat.add(dat.off as usize) },
+            ptr: unsafe { dat.dat().add(dat.off as usize) },
             len: dat.len as usize,
-            data: AtomicPtr::new(dat.dat as *mut ()),
+            data: AtomicPtr::new(dat.dat() as *mut ()),
             vtable: &SHARED_BYTES_BVT,
         }
         .into_bytes()

@@ -64,10 +64,11 @@ impl SharedBytesMeta {
 
 /// A slice of a reference-counted byte buffer.
 #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+#[repr(C)]
 pub struct SharedBytes {
+    pub(crate) dat_addr: u64,
     pub(crate) len: u32,
     pub(crate) off: u32,
-    pub(crate) dat: *const u8,
 }
 
 unsafe impl Sync for SharedBytes {}
@@ -78,11 +79,24 @@ impl SharedBytes {
     pub const EMPTY: Self = Self {
         len: 0,
         off: 0,
-        dat: core::ptr::null(),
+        dat_addr: 0,
     };
+
     /// Creates an empty `SharedBytes`.
     pub const fn empty() -> Self {
         Self::EMPTY
+    }
+
+    #[cfg(target_pointer_width = "64")]
+    #[inline]
+    pub(crate) const fn dat(&self) -> *const u8 {
+        (self.dat_addr.to_be() & 0x00FF_FFFF_FFFF_FFFF) as usize as *const u8
+    }
+
+    #[cfg(not(target_pointer_width = "64"))]
+    #[inline]
+    pub(crate) const fn dat(&self) -> *const u8 {
+        (self.dat_addr as usize) as *const u8
     }
 
     /// Creates a `SharedBytes` from a slice of bytes.
@@ -117,14 +131,17 @@ impl SharedBytes {
                     .with_align(align)
                     .with_refcount(1),
             );
-            ptr.offset(off as isize)
+            ptr.add(off)
                 .copy_from_nonoverlapping(dat.as_ptr(), dat.len());
             ptr
         };
+        let dat_addr = ptr as usize as u64;
+        #[cfg(target_pointer_width = "64")]
+        let dat_addr = dat_addr.to_be();
         Self {
             len,
             off: off as u32,
-            dat: ptr,
+            dat_addr,
         }
     }
 
@@ -145,9 +162,10 @@ impl SharedBytes {
 
     /// Returns `true` if there is only a single owner of the data.
     pub fn is_unique(&self) -> bool {
-        self.dat.is_null()
+        let dat = self.dat();
+        dat.is_null()
             || unsafe {
-                let meta = &*(self.dat as *const SharedBytesMeta);
+                let meta = &*(dat as *const SharedBytesMeta);
                 meta.refcnt.load(core::sync::atomic::Ordering::Relaxed) == 1
             }
     }
@@ -157,9 +175,11 @@ impl SharedBytes {
         if self.len == 0 {
             return &[];
         }
-        unsafe {
-            core::slice::from_raw_parts(self.dat.offset(self.off as isize), self.len as usize)
-        }
+        let len = self.len as usize;
+        let off = self.off as usize;
+        let dat = self.dat();
+        let dat = unsafe { dat.add(off) };
+        unsafe { core::slice::from_raw_parts(dat, len) }
     }
 
     /// Check if the underlying byte slice is equal to another. This can be used in a `const` context.
@@ -198,13 +218,13 @@ impl SharedBytes {
         }
         let len = len as u32;
         let off = self.off + offset as u32;
-        unsafe { &*(self.dat as *const SharedBytesMeta) }
+        unsafe { &*(self.dat() as *const SharedBytesMeta) }
             .refcnt
             .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
         Self {
             len,
             off,
-            dat: self.dat,
+            dat_addr: self.dat_addr,
         }
     }
 
@@ -286,10 +306,11 @@ impl SharedBytes {
 
     #[cfg(test)]
     pub(crate) fn ref_count(&self) -> u32 {
-        if self.dat.is_null() {
+        let dat = self.dat();
+        if dat.is_null() {
             return 0;
         }
-        unsafe { &*(self.dat as *const SharedBytesMeta) }
+        unsafe { &*(dat as *const SharedBytesMeta) }
             .refcnt
             .load(core::sync::atomic::Ordering::Relaxed)
     }
@@ -300,31 +321,40 @@ impl Clone for SharedBytes {
         if self.len == 0 {
             return Self::EMPTY;
         }
-        unsafe { &mut *(self.dat as *mut SharedBytesMeta) }
+        let dat = self.dat();
+        unsafe { &mut *(dat as *mut SharedBytesMeta) }
             .refcnt
             .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
         Self {
             len: self.len,
             off: self.off,
-            dat: self.dat,
+            dat_addr: self.dat_addr,
         }
     }
 }
 
 impl Drop for SharedBytes {
     fn drop(&mut self) {
-        if self.dat.is_null() {
+        let dat = self.dat();
+        if dat.is_null() {
             return;
         }
         unsafe {
-            let meta = &*(self.dat as *const SharedBytesMeta);
+            let meta = &*(dat as *const SharedBytesMeta);
             let refcnt = &meta.refcnt;
             if refcnt.fetch_sub(1, core::sync::atomic::Ordering::Relaxed) == 1 {
                 let layout =
                     alloc::alloc::Layout::from_size_align(meta.len as usize, meta.align()).unwrap();
-                alloc::alloc::dealloc(self.dat as *mut u8, layout);
+                alloc::alloc::dealloc(dat as *mut u8, layout);
             }
-            self.dat = core::ptr::null();
+            #[cfg(target_pointer_width = "64")]
+            {
+                self.dat_addr &= 0xFF00_0000_0000_0000;
+            }
+            #[cfg(not(target_pointer_width = "64"))]
+            {
+                self.dat_addr = 0;
+            }
         }
     }
 }
@@ -376,10 +406,12 @@ impl From<alloc::string::String> for SharedBytes {
 impl<'a> From<crate::ByteData<'a>> for SharedBytes {
     #[inline]
     fn from(dat: crate::ByteData<'a>) -> Self {
-        match dat {
-            crate::ByteData::Shared(dat) => dat,
-            x => Self::from_slice(x.as_slice()),
+        if unsafe { dat.kind }.kind == crate::bytedata::KIND_SHARED {
+            return unsafe { core::mem::transmute::<crate::ByteData, SharedBytes>(dat) };
         }
+        let a = Self::from_slice(dat.as_slice());
+        core::mem::forget(dat);
+        a
     }
 }
 
@@ -401,22 +433,23 @@ impl From<SharedBytesBuilder> for SharedBytes {
 impl From<SharedBytes> for SharedBytesBuilder {
     #[inline]
     fn from(mut dat: SharedBytes) -> Self {
-        if dat.dat.is_null() {
+        let dat_dat = dat.dat();
+        if dat_dat.is_null() {
             return SharedBytesBuilder::new();
         }
-        let meta = unsafe { &*(dat.dat as *const SharedBytesMeta) };
+        let meta = unsafe { &*(dat_dat as *const SharedBytesMeta) };
         let align = meta.align();
         if meta.refcnt.load(core::sync::atomic::Ordering::Relaxed) == 1 {
             let len = meta.len;
             let dat_len = dat.len;
-            let dataptr = dat.dat as *mut u8;
-            dat.dat = core::ptr::null();
-            let start_off = SharedBytesMeta::compute_start_offset(align) as u32;
+            let dataptr = dat_dat as *mut u8;
+            dat.dat_addr = 0;
+            let start_off = SharedBytesMeta::compute_start_offset(align);
             if dat_len != 0 && dat.off != start_off {
                 // there is a prefix of unwanted data, so we move it to the beginning
                 unsafe {
-                    let dst = dataptr.offset(start_off as isize);
-                    let src = dataptr.offset(dat.off as isize);
+                    let dst = dataptr.add(start_off as usize);
+                    let src = dataptr.add(dat.off as usize);
                     dst.copy_from(src, dat_len as usize);
                 }
             }
@@ -441,7 +474,7 @@ impl Index<usize> for SharedBytes {
         if idx >= self.len as usize {
             panic!("SharedBytes::index: index out of bounds");
         }
-        unsafe { &*self.dat.offset(self.off as isize + idx as isize) }
+        unsafe { &*self.dat().add(self.off as usize + idx) }
     }
 }
 
@@ -570,7 +603,7 @@ impl core::fmt::Debug for SharedBytes {
         f.debug_struct("SharedBytes")
             .field("len", &self.len)
             .field("off", &self.off)
-            .field("ptr", &self.dat)
+            .field("ptr", &self.dat())
             .field("dat", &self.as_slice())
             .finish()
     }

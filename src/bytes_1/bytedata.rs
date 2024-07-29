@@ -5,13 +5,16 @@ use crate::ByteData;
 #[cfg_attr(docsrs, doc(cfg(feature = "bytes_1")))]
 impl From<ByteData<'_>> for bytes::Bytes {
     fn from(dat: ByteData) -> Self {
-        match dat {
-            ByteData::Static(dat) => bytes::Bytes::from_static(dat),
-            ByteData::Borrowed(dat) => bytes::Bytes::copy_from_slice(dat),
+        match unsafe { dat.kind }.kind {
+            crate::bytedata::KIND_STATIC => {
+                bytes::Bytes::from_static(unsafe { dat.static_slice }.as_slice())
+            }
+            crate::bytedata::KIND_BORROWED => bytes::Bytes::copy_from_slice(dat.as_slice()),
             #[cfg(feature = "chunk")]
-            ByteData::Chunk(dat) => bytes::Bytes::copy_from_slice(dat.as_slice()),
+            crate::bytedata::KIND_CHUNK => bytes::Bytes::copy_from_slice(dat.as_slice()),
             #[cfg(feature = "alloc")]
-            ByteData::Shared(dat) => dat.into(),
+            crate::bytedata::KIND_SHARED => dat.into(),
+            _ => unreachable!(),
         }
     }
 }

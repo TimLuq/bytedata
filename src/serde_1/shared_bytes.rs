@@ -27,7 +27,7 @@ impl<'de> serde::de::Deserialize<'de> for SharedBytes {
                 Ok(v.into())
             }
 
-            fn visit_byte_buf<E>(self, v: Vec<u8>) -> Result<Self::Value, E>
+            fn visit_byte_buf<E>(self, v: alloc::vec::Vec<u8>) -> Result<Self::Value, E>
             where
                 E: serde::de::Error,
             {

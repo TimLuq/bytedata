@@ -193,10 +193,10 @@ impl Write for SharedBytesBuilder {
         if len != 0 {
             Ok(len)
         } else {
-            return Err(std::io::Error::new(
+            Err(std::io::Error::new(
                 std::io::ErrorKind::WriteZero,
                 "write_vectored failed to write any data as the buffer is full",
-            ));
+            ))
         }
     }
 }

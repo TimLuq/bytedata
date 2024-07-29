@@ -1,18 +1,18 @@
 use core::{ops::RangeBounds, slice::SliceIndex};
 
-/// A chunk of bytes that is 12 bytes or less.
+/// A chunk of bytes that is 14 bytes or less.
 #[cfg_attr(docsrs, doc(cfg(feature = "chunk")))]
 #[derive(Clone, Copy)]
 pub struct ByteChunk {
     /// The length of the chunk.
     pub(crate) len: u8,
     /// The data of the chunk.
-    pub(crate) data: [u8; Self::LEN],
+    pub(crate) data: [u8; 14],
 }
 
 impl ByteChunk {
     /// The maximum length of a `ByteChunk`.
-    pub const LEN: usize = 12;
+    pub const LEN: usize = 14;
 
     /// Create a `ByteChunk` from a slice.
     pub const fn from_slice(data: &[u8]) -> Self {
@@ -32,7 +32,7 @@ impl ByteChunk {
 
     /// Create a `ByteChunk` from a fixed-size array.
     pub const fn from_array<const L: usize>(data: &[u8; L]) -> Self {
-        core::assert!(L <= 12, "chunk data too large");
+        core::assert!(L <= 14, "chunk data too large");
         let mut chunk = ByteChunk {
             len: L as u8,
             data: unsafe { core::mem::zeroed() },
@@ -159,7 +159,7 @@ impl Default for ByteChunk {
     fn default() -> Self {
         ByteChunk {
             len: 0,
-            data: [0; 12],
+            data: [0; 14],
         }
     }
 }

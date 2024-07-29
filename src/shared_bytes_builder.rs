@@ -160,20 +160,18 @@ impl SharedBytesBuilder {
                 p
             }
         } else {
-            let start_off = SharedBytesMeta::compute_start_offset(self.align) as isize;
+            let start_off = SharedBytesMeta::compute_start_offset(self.align) as usize;
             unsafe {
                 let old_layout =
-                    alloc::alloc::Layout::from_size_align(self.len as usize, self.align as usize)
-                        .unwrap();
+                    alloc::alloc::Layout::from_size_align(self.len as usize, self.align).unwrap();
                 let mut ptr = alloc::alloc::realloc(self.dat, old_layout, new_len);
                 if ptr.is_null() {
                     let layout =
-                        alloc::alloc::Layout::from_size_align(new_len, self.align as usize)
-                            .unwrap();
+                        alloc::alloc::Layout::from_size_align(new_len, self.align).unwrap();
                     ptr = alloc::alloc::alloc(layout);
-                    let src = self.dat.offset(start_off);
-                    let dst = ptr.offset(start_off);
-                    dst.copy_from_nonoverlapping(src, self.off as usize - start_off as usize);
+                    let src = self.dat.add(start_off);
+                    let dst = ptr.add(start_off);
+                    dst.copy_from_nonoverlapping(src, self.off as usize - start_off);
                     alloc::alloc::dealloc(self.dat, old_layout);
                 }
                 ptr
@@ -243,7 +241,7 @@ impl SharedBytesBuilder {
             return SharedBytes {
                 len: 0,
                 off: 0,
-                dat: core::ptr::null(),
+                dat_addr: 0,
             };
         }
         let align = slf.align;
@@ -261,15 +259,19 @@ impl SharedBytesBuilder {
             return SharedBytes {
                 len: 0,
                 off: 0,
-                dat: core::ptr::null(),
+                dat_addr: 0,
             };
         }
+        #[allow(clippy::declare_interior_mutable_const)]
         const INIT: SharedBytesMeta = SharedBytesMeta::new().with_refcount(1);
         unsafe { (dat as *mut SharedBytesMeta).write(INIT.with_align(align).with_len(len)) };
+        let dat_addr = dat as usize as u64;
+        #[cfg(target_pointer_width = "64")]
+        let dat_addr = dat_addr.to_be();
         SharedBytes {
             len: off - data_off,
             off: data_off,
-            dat,
+            dat_addr,
         }
     }
 
@@ -476,21 +478,22 @@ impl core::fmt::UpperHex for SharedBytesBuilder {
     }
 }
 
-#[cfg(feature = "read_buf")]
+#[cfg(feature = "core_io_borrowed_buf")]
+#[cfg_attr(docsrs, doc(cfg(feature = "core_io_borrowed_buf")))]
 impl SharedBytesBuilder {
     /// Apply a function to the unused reserved bytes.
     pub fn apply_borrowed_buf<'this, R, F>(&'this mut self, f: F) -> R
     where
-        F: FnOnce(&mut std::io::BorrowedBuf<'this>) -> R,
+        F: FnOnce(&mut core::io::BorrowedBuf<'this>) -> R,
     {
         let off = self.off as isize;
         let mut bb = if self.len == 0 {
-            std::io::BorrowedBuf::from(&mut [] as &mut [u8])
+            core::io::BorrowedBuf::from(&mut [] as &mut [u8])
         } else {
             let data = unsafe { self.dat.offset(off) as *mut core::mem::MaybeUninit<u8> };
             let data =
                 unsafe { core::slice::from_raw_parts_mut(data, self.len as usize - off as usize) };
-            std::io::BorrowedBuf::from(data)
+            core::io::BorrowedBuf::from(data)
         };
         let ret = f(&mut bb);
         let len = bb.len() as u32;

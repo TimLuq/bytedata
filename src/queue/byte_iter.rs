@@ -33,6 +33,18 @@ impl<'a, 'b> ByteIter<'a, 'b> {
         self
     }
 
+    /// Skip the next `n` bytes.
+    #[inline]
+    pub(crate) fn skip_mut(&mut self, n: usize) -> &mut Self {
+        self.offset += n;
+        if self.offset >= self.len {
+            self.chunk = None;
+            self.offset = 0;
+            self.len = 0;
+        }
+        self
+    }
+
     /// Limit the iterator to at most `n` bytes.
     #[inline]
     pub const fn take(mut self, n: usize) -> Self {
@@ -87,17 +99,17 @@ impl<'a, 'b> Iterator for ByteIter<'a, 'b> {
     }
 
     #[inline]
-    fn last(self) -> Option<Self::Item> {
+    fn last(mut self) -> Option<Self::Item> {
         let l = self.len();
         if l == 0 {
             return None;
         }
-        self.skip(l - 1).next()
+        self.skip_mut(l - 1).next()
     }
 
     #[inline]
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
-        self.skip(n).next()
+        self.skip_mut(n).next()
     }
 }
 
@@ -122,7 +134,14 @@ impl<'a> OwnedByteIter<'a> {
 
     /// Skip the next `n` bytes.
     #[inline]
-    pub fn skip(mut self, mut n: usize) -> Self {
+    pub fn skip(mut self, n: usize) -> Self {
+        self.skip_mut(n);
+        self
+    }
+
+    /// Skip the next `n` bytes.
+    #[inline]
+    fn skip_mut(&mut self, mut n: usize) -> &mut Self {
         while let Some(mut a) = self.inner.pop_front() {
             if a.len() < n {
                 n -= a.len();
@@ -193,7 +212,7 @@ impl<'a> Iterator for OwnedByteIter<'a> {
 
     #[inline]
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
-        self.skip(n).next()
+        self.skip_mut(n).next()
     }
 }
 

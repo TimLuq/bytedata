@@ -30,7 +30,7 @@ impl<'de> serde::de::Deserialize<'de> for StringData<'de> {
 
             fn visit_str<E: serde::de::Error>(self, _v: &str) -> Result<Self::Value, E> {
                 #[cfg(feature = "chunk")]
-                if _v.len() <= 12 {
+                if _v.len() <= 14 {
                     return Ok(unsafe {
                         StringData::from_bytedata_unchecked(crate::ByteData::from_chunk_slice(
                             _v.as_bytes(),
@@ -43,7 +43,7 @@ impl<'de> serde::de::Deserialize<'de> for StringData<'de> {
                 }
                 #[cfg(not(feature = "alloc"))]
                 {
-                    Err(serde::de::Error::custom("the `alloc` or `std` feature is required in `stringdata` for ephemeral string data"))
+                    Err(serde::de::Error::custom("the `alloc` or `std` feature is required in `bytedata` for ephemeral string data"))
                 }
             }
         }
