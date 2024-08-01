@@ -775,6 +775,13 @@ impl PartialEq<ByteData<'_>> for [u8] {
     }
 }
 
+impl<'a, 'b> PartialEq<ByteData<'a>> for &'b [u8] {
+    #[inline]
+    fn eq(&self, other: &ByteData<'a>) -> bool {
+        (*self).eq(other.as_slice())
+    }
+}
+
 #[cfg(feature = "alloc")]
 #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl PartialEq<Vec<u8>> for ByteData<'_> {

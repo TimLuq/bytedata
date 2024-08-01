@@ -424,6 +424,20 @@ impl PartialEq<StringData<'_>> for str {
     }
 }
 
+impl<'a, 'b> PartialEq<StringData<'a>> for &'b str {
+    #[inline]
+    fn eq(&self, other: &StringData<'a>) -> bool {
+        (*self).eq(other.as_str())
+    }
+}
+
+impl<'a, 'b> PartialEq<StringData<'a>> for &'b [u8] {
+    #[inline]
+    fn eq(&self, other: &StringData<'a>) -> bool {
+        (*self).eq(other.as_bytes())
+    }
+}
+
 #[cfg(feature = "alloc")]
 #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl PartialEq<Vec<u8>> for StringData<'_> {
