@@ -76,6 +76,7 @@ impl BufRead for ByteData<'_> {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
 impl Read for SharedBytes {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         let len = buf.len().min(self.len());
@@ -198,5 +199,147 @@ impl Write for SharedBytesBuilder {
                 "write_vectored failed to write any data as the buffer is full",
             ))
         }
+    }
+}
+
+#[cfg(feature = "queue")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "queue")))]
+impl<'a> Read for crate::ByteQueue<'a> {
+    fn read(&mut self, mut buf: &mut [u8]) -> std::io::Result<usize> {
+        let len = buf.len().min(self.len());
+        let mut left = len;
+        while left != 0 {
+            let mut a = self.pop_front().unwrap();
+            let l = a.len();
+            if l <= left {
+                buf[..l].copy_from_slice(&a);
+                left -= l;
+                buf = &mut buf[l..];
+                continue;
+            } else {
+                buf.copy_from_slice(&a.as_slice()[..left]);
+                a.make_sliced(left..);
+                self.push_front(a);
+                break;
+            }
+        }
+        Ok(len)
+    }
+
+    fn read_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> std::io::Result<usize> {
+        let mut offs = 0;
+
+        'outer: for buf in bufs {
+            let mut buf = buf.as_mut();
+            while !buf.is_empty() {
+                let Some(mut a) = self.pop_front() else {
+                    return Ok(offs);
+                };
+                let l = a.len();
+                let left = buf.len();
+                if l <= left {
+                    buf[..l].copy_from_slice(&a);
+                    buf = &mut buf[l..];
+                    offs += l;
+                    continue;
+                } else {
+                    buf.copy_from_slice(&a.as_slice()[..left]);
+                    a.make_sliced(left..);
+                    self.push_front(a);
+                    offs += left;
+                    continue 'outer;
+                }
+            }
+        }
+        Ok(offs)
+    }
+
+    fn read_to_end(&mut self, buf: &mut Vec<u8>) -> std::io::Result<usize> {
+        let len = self.len();
+        if len == 0 {
+            return Ok(0);
+        }
+        let swapped = std::mem::replace(self, crate::ByteQueue::new());
+        buf.reserve(len);
+        for a in swapped.into_iter() {
+            buf.extend_from_slice(&a);
+        }
+        Ok(len)
+    }
+}
+
+#[cfg(feature = "queue")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "queue")))]
+impl<'a> BufRead for crate::ByteQueue<'a> {
+    fn fill_buf(&mut self) -> std::io::Result<&[u8]> {
+        let Some(f) = self.front() else {
+            return Ok(&[]);
+        };
+        Ok(f.as_slice())
+    }
+
+    fn consume(&mut self, amt: usize) {
+        crate::ByteQueue::consume(self, amt);
+    }
+
+    fn read_until(&mut self, byte: u8, buf: &mut Vec<u8>) -> std::io::Result<usize> {
+        if self.is_empty() {
+            return Ok(0);
+        }
+        let mut offs = 0;
+
+        while let Some(mut a) = self.pop_front() {
+            let l = a.len();
+            let b = a.as_slice();
+            let mut i = 0;
+            while i < l {
+                if b[i] == byte {
+                    i += 1;
+                    buf.extend_from_slice(&b[..i]);
+                    offs += i;
+                    a.make_sliced(i..);
+                    self.push_front(a);
+                    return Ok(offs);
+                }
+                i += 1;
+            }
+            buf.extend_from_slice(&a);
+            offs += l;
+        }
+
+        Ok(offs)
+    }
+}
+
+#[cfg(feature = "queue")]
+#[cfg_attr(docsrs, doc(cfg(feature = "std")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "queue")))]
+impl<'a> Write for crate::ByteQueue<'a> {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let len = buf.len();
+        if len == 0 {
+            return Ok(0);
+        }
+        #[cfg(feature = "chunk")]
+        if len <= crate::ByteChunk::LEN {
+            self.push_back(ByteData::from_chunk_slice(buf));
+            return Ok(len);
+        }
+        let buf = ByteData::from_shared(buf.into());
+        self.push_back(buf);
+        Ok(len)
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+
+    fn write_vectored(&mut self, bufs: &[std::io::IoSlice<'_>]) -> std::io::Result<usize> {
+        let mut shared = crate::SharedBytesBuilder::new();
+        let res = Write::write_vectored(&mut shared, bufs)?;
+        self.push_back(shared.build());
+        Ok(res)
     }
 }
