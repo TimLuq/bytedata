@@ -6,6 +6,8 @@ use ::bytes_1 as bytes;
 
 mod bytedata;
 
+#[cfg(feature = "alloc")]
+mod external;
 #[cfg(feature = "queue")]
 mod queue;
 #[cfg(feature = "alloc")]

@@ -44,7 +44,22 @@ impl<'a: 'b, 'b> LinkedIter<'a, 'b> {
         }
         len
     }
+}
 
+#[cfg(not(feature = "alloc"))]
+impl<'a: 'b, 'b> LinkedIter<'a, 'b> {
+    #[inline]
+    pub(super) const fn new(data: &'b super::linked_node_data::LinkedNodeData<'a>) -> Self {
+        Self { data, offset: 0 }
+    }
+
+    #[inline]
+    const fn item_len(&self) -> usize {
+        self.data.len as usize - self.offset
+    }
+}
+
+impl<'a: 'b, 'b> LinkedIter<'a, 'b> {
     /// Skips the next `n` items.
     #[inline]
     pub fn skip(mut self, n: usize) -> Self {
@@ -91,19 +106,6 @@ impl<'a: 'b, 'b> LinkedIter<'a, 'b> {
             n -= skip;
         }
         self
-    }
-}
-
-#[cfg(not(feature = "alloc"))]
-impl<'a: 'b, 'b> LinkedIter<'a, 'b> {
-    #[inline]
-    pub(super) const fn new(data: &'b super::linked_node_data::LinkedNodeData<'a>) -> Self {
-        Self { data, offset: 0 }
-    }
-
-    #[inline]
-    const fn item_len(&self) -> usize {
-        self.data.len as usize - self.offset
     }
 }
 

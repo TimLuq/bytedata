@@ -69,6 +69,10 @@ pub mod queue;
 #[cfg_attr(docsrs, doc(cfg(feature = "queue")))]
 pub use queue::{ByteQueue, StringQueue};
 
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+pub mod external;
+
 #[cfg(feature = "bytes_1")]
 mod bytes_1;
 

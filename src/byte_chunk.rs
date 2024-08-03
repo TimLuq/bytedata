@@ -31,7 +31,7 @@ impl ByteChunk {
 
     /// Create a `ByteChunk` from a fixed-size array.
     pub const fn from_array<const L: usize>(data: &[u8; L]) -> Self {
-        core::assert!(L <= 14, "chunk data too large");
+        core::assert!(L <= Self::LEN, "chunk data too large");
         let mut chunk = ByteChunk {
             len: L as u8,
             data: unsafe { core::mem::zeroed() },
@@ -156,9 +156,6 @@ impl ByteChunk {
 impl Default for ByteChunk {
     #[inline]
     fn default() -> Self {
-        ByteChunk {
-            len: 0,
-            data: [0; 14],
-        }
+        unsafe { core::mem::zeroed() }
     }
 }

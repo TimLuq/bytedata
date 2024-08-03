@@ -93,11 +93,21 @@ impl<T: Copy> DataKind<T> {
         }
 
         #[cfg(feature = "alloc")]
+        if base_kind == crate::external::KIND_EXT_BYTES {
+            return Kind::External;
+        }
+
+        #[cfg(feature = "alloc")]
         if (base_kind & 0b0000_0011) == 0b0000_0000 {
             return Kind::Shared;
         }
+
         #[cfg(not(feature = "alloc"))]
         if (base_kind & 0b0000_0011) == 0b0000_0000 {
+            panic!("alloc feature is not enabled, so no path should trigger this");
+        }
+        #[cfg(not(feature = "alloc"))]
+        if (base_kind & 0b0000_0011) == 0b0000_0001 {
             panic!("alloc feature is not enabled, so no path should trigger this");
         }
 
@@ -110,6 +120,8 @@ pub(crate) enum Kind {
     Slice,
     #[cfg(feature = "alloc")]
     Shared,
+    #[cfg(feature = "alloc")]
+    External,
 }
 
 const KIND_CHUNK_MASK: u8 = 0b0000_0111;
@@ -126,6 +138,10 @@ pub union ByteData<'a> {
     /// A shared byte slice.
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     pub(crate) shared: core::mem::ManuallyDrop<SharedBytes>,
+    #[cfg(feature = "alloc")]
+    /// A shared byte slice.
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    pub(crate) external: core::mem::ManuallyDrop<crate::external::ExtBytes>,
 }
 
 impl<'a> Clone for ByteData<'a> {
@@ -140,6 +156,12 @@ impl<'a> Clone for ByteData<'a> {
             #[cfg(feature = "alloc")]
             Kind::Shared => Self {
                 shared: core::mem::ManuallyDrop::new(unsafe { SharedBytes::clone(&self.shared) }),
+            },
+            #[cfg(feature = "alloc")]
+            Kind::External => Self {
+                external: core::mem::ManuallyDrop::new(unsafe {
+                    crate::external::ExtBytes::clone(&self.external)
+                }),
             },
         }
     }
@@ -159,6 +181,11 @@ impl<'a> Drop for ByteData<'a> {
             #[cfg(feature = "alloc")]
             Kind::Shared => unsafe {
                 core::ptr::drop_in_place(&mut self.shared);
+                self.chunk = empty_chunk();
+            },
+            #[cfg(feature = "alloc")]
+            Kind::External => unsafe {
+                core::ptr::drop_in_place(&mut self.external);
                 self.chunk = empty_chunk();
             },
         }
@@ -253,7 +280,7 @@ impl<'a> ByteData<'a> {
         if dat.is_empty() {
             return Self::empty();
         }
-        if dat.len() <= 14 {
+        if dat.len() <= crate::byte_chunk::ByteChunk::LEN {
             return Self {
                 chunk: WrappedChunk {
                     kind: KIND_CHUNK_MASK,
@@ -261,9 +288,15 @@ impl<'a> ByteData<'a> {
                 },
             };
         }
-        Self {
-            shared: core::mem::ManuallyDrop::new(dat.into()),
-        }
+        crate::external::ExtBytes::create(dat)
+    }
+
+    #[cfg(feature = "alloc")]
+    /// Creates a `ByteData` from an externally kept byte sequence.
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    #[inline]
+    pub fn from_external<E: crate::external::ExternalBytes>(dat: E) -> Self {
+        crate::external::ExtBytes::create(dat)
     }
 
     #[cfg(feature = "alloc")]
@@ -298,6 +331,14 @@ impl<'a> ByteData<'a> {
                 )
             }
             .as_slice(),
+            #[cfg(feature = "alloc")]
+            Kind::External => unsafe {
+                core::mem::transmute::<
+                    &core::mem::ManuallyDrop<crate::external::ExtBytes>,
+                    &crate::external::ExtBytes,
+                >(&self.external)
+            }
+            .as_slice(),
         }
     }
 
@@ -311,6 +352,14 @@ impl<'a> ByteData<'a> {
                 core::mem::transmute::<&core::mem::ManuallyDrop<SharedBytes>, &SharedBytes>(
                     &self.shared,
                 )
+            }
+            .len(),
+            #[cfg(feature = "alloc")]
+            Kind::External => unsafe {
+                core::mem::transmute::<
+                    &core::mem::ManuallyDrop<crate::external::ExtBytes>,
+                    &crate::external::ExtBytes,
+                >(&self.external)
             }
             .len(),
         }
@@ -328,6 +377,8 @@ impl<'a> ByteData<'a> {
                 )
             }
             .is_empty(),
+            #[cfg(feature = "alloc")]
+            Kind::External => false,
         }
     }
 
@@ -376,11 +427,21 @@ impl<'a> ByteData<'a> {
                     )
                 };
                 let dat = dat.sliced_range(range);
-                if dat.len() <= 14 {
+                if dat.len() <= crate::byte_chunk::ByteChunk::LEN {
                     Self::from_chunk_slice(dat.as_slice())
                 } else {
                     Self::from_shared(dat)
                 }
+            }
+            #[cfg(feature = "alloc")]
+            Kind::External => {
+                let dat = unsafe {
+                    core::mem::transmute::<
+                        &core::mem::ManuallyDrop<crate::external::ExtBytes>,
+                        &crate::external::ExtBytes,
+                    >(&self.external)
+                };
+                dat.sliced_range(range)
             }
         }
     }
@@ -409,7 +470,25 @@ impl<'a> ByteData<'a> {
                     >(&mut self.shared)
                 };
                 dat.make_sliced_range(range);
-                if dat.len() <= 14 {
+                if dat.len() <= crate::byte_chunk::ByteChunk::LEN {
+                    let r = Self::from_chunk_slice(dat.as_slice());
+                    unsafe { core::ptr::drop_in_place(dat) };
+                    core::mem::forget(self);
+                    r
+                } else {
+                    self
+                }
+            }
+            #[cfg(feature = "alloc")]
+            Kind::External => {
+                let dat = unsafe {
+                    core::mem::transmute::<
+                        &mut core::mem::ManuallyDrop<crate::external::ExtBytes>,
+                        &mut crate::external::ExtBytes,
+                    >(&mut self.external)
+                };
+                dat.make_sliced_range(range);
+                if dat.len() <= crate::byte_chunk::ByteChunk::LEN {
                     let r = Self::from_chunk_slice(dat.as_slice());
                     unsafe { core::ptr::drop_in_place(dat) };
                     core::mem::forget(self);
@@ -443,7 +522,27 @@ impl<'a> ByteData<'a> {
                     >(&mut self.shared)
                 };
                 dat.make_sliced_range(range);
-                if dat.len() <= 14 {
+                if dat.len() <= crate::byte_chunk::ByteChunk::LEN {
+                    let r = crate::ByteChunk::from_slice(dat.as_slice());
+                    unsafe {
+                        core::ptr::drop_in_place(dat);
+                        self.chunk = DataKind {
+                            kind: KIND_CHUNK_MASK,
+                            data: r,
+                        };
+                    }
+                }
+            }
+            #[cfg(feature = "alloc")]
+            Kind::External => {
+                let dat = unsafe {
+                    core::mem::transmute::<
+                        &mut core::mem::ManuallyDrop<crate::external::ExtBytes>,
+                        &mut crate::external::ExtBytes,
+                    >(&mut self.external)
+                };
+                dat.make_sliced_range(range);
+                if dat.len() <= crate::byte_chunk::ByteChunk::LEN {
                     let r = crate::ByteChunk::from_slice(dat.as_slice());
                     unsafe {
                         core::ptr::drop_in_place(dat);
@@ -462,14 +561,14 @@ impl<'a> ByteData<'a> {
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     pub fn into_shared<'s>(mut self) -> ByteData<'s> {
         match unsafe { self.chunk.kind() } {
-            Kind::Chunk | Kind::Shared => unsafe {
+            Kind::Chunk | Kind::Shared | Kind::External => unsafe {
                 core::mem::transmute::<ByteData, ByteData>(self)
             },
             Kind::Slice => {
                 let a = unsafe { &self.slice };
                 if a.is_static() {
                     unsafe { core::mem::transmute::<ByteData, ByteData>(self) }
-                } else if a.len() <= 14 {
+                } else if a.len() <= crate::byte_chunk::ByteChunk::LEN {
                     let r = crate::byte_chunk::ByteChunk::from_slice(a.as_slice());
                     core::mem::forget(self);
                     ByteData {
@@ -505,10 +604,14 @@ impl<'a> ByteData<'a> {
                 (*self.shared).make_sliced_range(range);
                 core::mem::transmute::<ByteData, ByteData>(self)
             },
+            Kind::External => unsafe {
+                (*self.external).make_sliced_range(range);
+                core::mem::transmute::<ByteData, ByteData>(self)
+            },
             Kind::Slice => {
                 let a = unsafe { &self.slice };
                 let r = &a.as_slice()[range];
-                if r.len() <= 14 {
+                if r.len() <= crate::byte_chunk::ByteChunk::LEN {
                     let r = crate::byte_chunk::ByteChunk::from_slice(r);
                     core::mem::forget(self);
                     return ByteData {
@@ -664,7 +767,7 @@ impl<'a> From<&'a [u8]> for ByteData<'a> {
 impl<'a> From<SharedBytes> for ByteData<'a> {
     #[inline]
     fn from(dat: SharedBytes) -> Self {
-        if dat.len() <= 14 {
+        if dat.len() <= crate::byte_chunk::ByteChunk::LEN {
             Self::from_chunk_slice(&dat)
         } else {
             Self::from_shared(dat)

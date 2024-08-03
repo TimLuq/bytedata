@@ -36,6 +36,22 @@ impl From<ByteData<'_>> for bytes::Bytes {
                 let s = unsafe { core::mem::transmute::<ByteData, crate::SharedBytes>(dat) };
                 s.into()
             }
+            #[cfg(feature = "alloc")]
+            crate::bytedata::Kind::External => {
+                let s = unsafe { core::mem::transmute::<ByteData, crate::external::ExtBytes>(dat) };
+                let r = s.with_inner(|t: &bytes::Bytes, s: &[u8]| {
+                    let start = {
+                        let sp: *const u8 = s.as_ptr();
+                        let tp: *const u8 = t.as_ptr();
+                        sp as usize - tp as usize
+                    };
+                    t.slice(start..(start + s.len()))
+                });
+                match r {
+                    Some(r) => r,
+                    None => bytes::Bytes::copy_from_slice(s.as_slice()),
+                }
+            }
         }
     }
 }
