@@ -266,8 +266,7 @@ impl SharedBytesBuilder {
         const INIT: SharedBytesMeta = SharedBytesMeta::new().with_refcount(1);
         unsafe { (dat as *mut SharedBytesMeta).write(INIT.with_align(align).with_len(len)) };
         let dat_addr = dat as usize as u64;
-        #[cfg(target_pointer_width = "64")]
-        let dat_addr = dat_addr.to_be();
+        let dat_addr = dat_addr.to_le();
         SharedBytes {
             len: off - data_off,
             off: data_off,

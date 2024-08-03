@@ -5,16 +5,37 @@ use crate::ByteData;
 #[cfg_attr(docsrs, doc(cfg(feature = "bytes_1")))]
 impl From<ByteData<'_>> for bytes::Bytes {
     fn from(dat: ByteData) -> Self {
-        match unsafe { dat.kind }.kind {
-            crate::bytedata::KIND_STATIC => {
-                bytes::Bytes::from_static(unsafe { dat.static_slice }.as_slice())
+        match unsafe { dat.chunk.kind() } {
+            crate::bytedata::Kind::Slice => {
+                let a = unsafe { &dat.slice };
+                if a.is_empty() {
+                    core::mem::forget(dat);
+                    return bytes::Bytes::new();
+                }
+                if let Some(a) = a.as_static() {
+                    let r = bytes::Bytes::from_static(a);
+                    core::mem::forget(dat);
+                    return r;
+                }
+                let r = bytes::Bytes::copy_from_slice(a.as_slice());
+                core::mem::forget(dat);
+                r
             }
-            crate::bytedata::KIND_BORROWED => bytes::Bytes::copy_from_slice(dat.as_slice()),
-            #[cfg(feature = "chunk")]
-            crate::bytedata::KIND_CHUNK => bytes::Bytes::copy_from_slice(dat.as_slice()),
+            crate::bytedata::Kind::Chunk => {
+                let l = unsafe { dat.chunk.data.len };
+                if l == 0 {
+                    core::mem::forget(dat);
+                    return bytes::Bytes::new();
+                }
+                let r = bytes::Bytes::copy_from_slice(unsafe { dat.chunk.data.as_slice() });
+                core::mem::forget(dat);
+                r
+            }
             #[cfg(feature = "alloc")]
-            crate::bytedata::KIND_SHARED => dat.into(),
-            _ => unreachable!(),
+            crate::bytedata::Kind::Shared => {
+                let s = unsafe { core::mem::transmute::<ByteData, crate::SharedBytes>(dat) };
+                s.into()
+            }
         }
     }
 }

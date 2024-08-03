@@ -319,10 +319,6 @@ impl<'a> BufRead for crate::ByteQueue<'a> {
 impl<'a> Write for crate::ByteQueue<'a> {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
         let len = buf.len();
-        if len == 0 {
-            return Ok(0);
-        }
-        #[cfg(feature = "chunk")]
         if len <= crate::ByteChunk::LEN {
             self.push_back(ByteData::from_chunk_slice(buf));
             return Ok(len);

@@ -59,9 +59,7 @@ mod macros;
 #[allow(unused_imports)]
 pub use self::macros::*;
 
-#[cfg(feature = "chunk")]
 mod byte_chunk;
-#[cfg(feature = "chunk")]
 pub use byte_chunk::ByteChunk;
 
 #[cfg(feature = "queue")]

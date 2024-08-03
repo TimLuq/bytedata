@@ -5,13 +5,13 @@ fn test_bytedata_bytes_1_static() {
     let s0 = crate::bytedata::ByteData::from(s0);
     #[cfg(not(feature = "bytes_1_safe"))]
     assert!(matches!(
-        unsafe { s0.kind }.kind,
-        crate::bytedata::KIND_STATIC
+        unsafe { s0.chunk.kind() },
+        crate::bytedata::Kind::Slice
     ));
     #[cfg(feature = "bytes_1_safe")]
     assert!(matches!(
-        unsafe { s0.kind }.kind,
-        crate::bytedata::KIND_SHARED
+        unsafe { s0.chunk.kind() },
+        crate::bytedata::Kind::Shared
     ));
     assert_eq!(s0, b"hello world".as_slice());
 }
@@ -22,8 +22,8 @@ fn test_bytedata_bytes_1_borrowed() {
     let s0: ::bytes_1::Bytes = ::bytes_1::Bytes::copy_from_slice(b"hello world");
     let s0 = crate::bytedata::ByteData::from(s0);
     assert!(matches!(
-        unsafe { s0.kind }.kind,
-        crate::bytedata::KIND_SHARED
+        unsafe { s0.chunk.kind() },
+        crate::bytedata::Kind::Shared
     ));
     assert_eq!(s0, b"hello world".as_slice());
 }
@@ -35,8 +35,8 @@ fn test_bytedata_bytes_1_boxed() {
         ::bytes_1::Bytes::from(alloc::boxed::Box::<[u8]>::from(b"hello world".as_slice()));
     let s0 = crate::bytedata::ByteData::from(s0);
     assert!(matches!(
-        unsafe { s0.kind }.kind,
-        crate::bytedata::KIND_SHARED
+        unsafe { s0.chunk.kind() },
+        crate::bytedata::Kind::Shared
     ));
     assert_eq!(s0, b"hello world".as_slice());
 }
@@ -48,8 +48,8 @@ fn test_bytedata_bytes_1_vec_exact() {
         ::bytes_1::Bytes::from(alloc::vec::Vec::<u8>::from(b"hello world".as_slice()));
     let s0 = crate::bytedata::ByteData::from(s0);
     assert!(matches!(
-        unsafe { s0.kind }.kind,
-        crate::bytedata::KIND_SHARED
+        unsafe { s0.chunk.kind() },
+        crate::bytedata::Kind::Shared
     ));
     assert_eq!(s0, b"hello world".as_slice());
 }
@@ -62,8 +62,8 @@ fn test_bytedata_bytes_1_vec_extra() {
     let s0: ::bytes_1::Bytes = ::bytes_1::Bytes::from(s0);
     let s0 = crate::bytedata::ByteData::from(s0);
     assert!(matches!(
-        unsafe { s0.kind }.kind,
-        crate::bytedata::KIND_SHARED
+        unsafe { s0.chunk.kind() },
+        crate::bytedata::Kind::Shared
     ));
     assert_eq!(s0, b"hello world".as_slice());
 }

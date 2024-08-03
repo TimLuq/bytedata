@@ -34,6 +34,17 @@ static SHARED_BYTES_BVT: super::SBytesVtable = super::SBytesVtable {
         }
         vec
     },
+    to_mut: |_data, ptr, len| {
+        if len == 0 {
+            return bytes::BytesMut::new();
+        }
+        let mut vec = bytes::BytesMut::with_capacity(len);
+        unsafe {
+            core::ptr::copy_nonoverlapping(ptr, vec.as_mut_ptr(), len);
+            vec.set_len(len);
+        }
+        vec
+    },
     is_unique: |data| unsafe {
         let p = data.load(Ordering::Relaxed);
         let meta = &*(p as *const crate::SharedBytesMeta);

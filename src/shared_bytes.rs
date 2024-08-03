@@ -87,16 +87,9 @@ impl SharedBytes {
         Self::EMPTY
     }
 
-    #[cfg(target_pointer_width = "64")]
     #[inline]
     pub(crate) const fn dat(&self) -> *const u8 {
-        (self.dat_addr.to_be() & 0x00FF_FFFF_FFFF_FFFF) as usize as *const u8
-    }
-
-    #[cfg(not(target_pointer_width = "64"))]
-    #[inline]
-    pub(crate) const fn dat(&self) -> *const u8 {
-        (self.dat_addr as usize) as *const u8
+        self.dat_addr.to_le() as usize as *const u8
     }
 
     /// Creates a `SharedBytes` from a slice of bytes.
@@ -136,8 +129,7 @@ impl SharedBytes {
             ptr
         };
         let dat_addr = ptr as usize as u64;
-        #[cfg(target_pointer_width = "64")]
-        let dat_addr = dat_addr.to_be();
+        let dat_addr = dat_addr.to_le();
         Self {
             len,
             off: off as u32,
@@ -406,11 +398,11 @@ impl From<alloc::string::String> for SharedBytes {
 impl<'a> From<crate::ByteData<'a>> for SharedBytes {
     #[inline]
     fn from(dat: crate::ByteData<'a>) -> Self {
-        if unsafe { dat.kind }.kind == crate::bytedata::KIND_SHARED {
+        if matches!(unsafe { dat.chunk.kind() }, crate::bytedata::Kind::Shared) {
             return unsafe { core::mem::transmute::<crate::ByteData, SharedBytes>(dat) };
         }
         let a = Self::from_slice(dat.as_slice());
-        core::mem::forget(dat);
+        core::mem::drop(dat);
         a
     }
 }

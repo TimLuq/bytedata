@@ -29,8 +29,7 @@ impl<'de> serde::de::Deserialize<'de> for ByteData<'de> {
             }
 
             fn visit_bytes<E: serde::de::Error>(self, v: &[u8]) -> Result<Self::Value, E> {
-                #[cfg(feature = "chunk")]
-                if v.len() <= 14 {
+                if v.len() <= crate::ByteChunk::LEN {
                     return Ok(ByteData::from_chunk_slice(v));
                 }
                 #[cfg(feature = "alloc")]

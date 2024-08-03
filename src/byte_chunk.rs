@@ -1,7 +1,6 @@
 use core::{ops::RangeBounds, slice::SliceIndex};
 
 /// A chunk of bytes that is 14 bytes or less.
-#[cfg_attr(docsrs, doc(cfg(feature = "chunk")))]
 #[derive(Clone, Copy)]
 pub struct ByteChunk {
     /// The length of the chunk.

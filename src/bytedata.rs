@@ -22,10 +22,9 @@ unsafe impl<'a> Sync for ByteSlice<'a> {}
 
 impl<'a> ByteSlice<'a> {
     #[inline]
-    const fn new(data: &[u8]) -> Self {
-        let len = data.len() as u64;
-        #[cfg(target_pointer_width = "64")]
-        let len = len.to_be();
+    const fn new(data: &[u8], is_static: bool) -> Self {
+        let mask = if is_static { 0b1000_1111 } else { 0b0000_1111 };
+        let len = (((data.len() as u64) << 8) | mask).to_le();
         ByteSlice {
             addr: data.as_ptr(),
             len,
@@ -34,21 +33,20 @@ impl<'a> ByteSlice<'a> {
     }
 
     #[inline]
-    const fn is_empty(&self) -> bool {
+    pub(crate) const fn is_static(&self) -> bool {
+        let p = unsafe { core::mem::transmute_copy::<Self, u8>(self) };
+        (p & 0b1000_0000) != 0
+    }
+
+    #[inline]
+    pub(crate) const fn is_empty(&self) -> bool {
         self.len() == 0
     }
 
-    #[cfg(target_pointer_width = "64")]
     #[inline]
-    const fn len(&self) -> usize {
-        let a = self.len.to_be() & 0x00FF_FFFF_FFFF_FFFF;
+    pub(crate) const fn len(&self) -> usize {
+        let a = self.len.to_le() >> 8;
         a as usize
-    }
-
-    #[cfg(not(target_pointer_width = "64"))]
-    #[inline]
-    const fn len(&self) -> usize {
-        self.len as usize
     }
 
     #[inline]
@@ -56,37 +54,74 @@ impl<'a> ByteSlice<'a> {
         let len = self.len();
         unsafe { core::slice::from_raw_parts(self.addr, len) }
     }
+
+    #[allow(dead_code)]
+    #[inline]
+    pub(crate) const fn as_static(&self) -> Option<&'static [u8]> {
+        if self.is_static() {
+            Some(unsafe { core::mem::transmute::<&[u8], &'static [u8]>(self.as_slice()) })
+        } else {
+            None
+        }
+    }
+}
+
+impl ByteSlice<'static> {
+    #[inline]
+    fn make_static(&mut self) {
+        let p = self as *mut Self as *mut u8;
+        unsafe { *p |= 0b1000_0000 };
+    }
 }
 
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub(crate) struct DataKind<T: Copy> {
     pub(crate) kind: u8,
-    data: T,
+    pub(crate) data: T,
 }
 
-pub(crate) const KIND_EMPTY: u8 = 0;
-pub(crate) const KIND_STATIC: u8 = 1;
-pub(crate) const KIND_BORROWED: u8 = 2;
-#[cfg(feature = "chunk")]
-pub(crate) const KIND_CHUNK: u8 = 3;
-#[cfg(feature = "alloc")]
-pub(crate) const KIND_SHARED: u8 = 4;
+impl<T: Copy> DataKind<T> {
+    #[inline]
+    pub(crate) const fn kind(&self) -> Kind {
+        let base_kind = self.kind & 0b0000_1111;
+        if base_kind == 0b0000_0111 {
+            return Kind::Chunk;
+        }
+        if base_kind == 0b0000_1111 {
+            return Kind::Slice;
+        }
+
+        #[cfg(feature = "alloc")]
+        if (base_kind & 0b0000_0011) == 0b0000_0000 {
+            return Kind::Shared;
+        }
+        #[cfg(not(feature = "alloc"))]
+        if (base_kind & 0b0000_0011) == 0b0000_0000 {
+            panic!("alloc feature is not enabled, so no path should trigger this");
+        }
+
+        panic!("no path should trigger this");
+    }
+}
+
+pub(crate) enum Kind {
+    Chunk,
+    Slice,
+    #[cfg(feature = "alloc")]
+    Shared,
+}
+
+const KIND_CHUNK_MASK: u8 = 0b0000_0111;
 
 type WrappedChunk = DataKind<crate::byte_chunk::ByteChunk>;
 
 /// A container of bytes that can be either static, borrowed, or shared.
 pub union ByteData<'a> {
-    /// Placeholder for the data kind.
-    pub(crate) kind: DataKind<[u8; 15]>,
-    /// A static byte slice.
-    pub(crate) static_slice: ByteSlice<'static>,
-    /// A borrowed byte slice.
-    pub(crate) borrowed_slice: ByteSlice<'a>,
-    #[cfg(feature = "chunk")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "chunk")))]
     /// A chunk of bytes that is 14 bytes or less.
     pub(crate) chunk: WrappedChunk,
+    /// A byte slice.
+    pub(crate) slice: ByteSlice<'a>,
     #[cfg(feature = "alloc")]
     /// A shared byte slice.
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
@@ -95,38 +130,37 @@ pub union ByteData<'a> {
 
 impl<'a> Clone for ByteData<'a> {
     fn clone(&self) -> Self {
-        match unsafe { self.kind }.kind {
-            KIND_EMPTY => Self::empty(),
-            KIND_STATIC => Self {
-                static_slice: unsafe { self.static_slice },
-            },
-            KIND_BORROWED => Self {
-                borrowed_slice: unsafe { self.borrowed_slice },
-            },
-            #[cfg(feature = "chunk")]
-            KIND_CHUNK => Self {
+        match unsafe { self.chunk.kind() } {
+            Kind::Chunk => Self {
                 chunk: unsafe { self.chunk },
             },
+            Kind::Slice => Self {
+                slice: unsafe { self.slice },
+            },
             #[cfg(feature = "alloc")]
-            KIND_SHARED => Self {
+            Kind::Shared => Self {
                 shared: core::mem::ManuallyDrop::new(unsafe { SharedBytes::clone(&self.shared) }),
             },
-            _ => unreachable!(),
         }
+    }
+}
+
+const fn empty_chunk() -> WrappedChunk {
+    WrappedChunk {
+        kind: KIND_CHUNK_MASK,
+        data: unsafe { core::mem::zeroed() },
     }
 }
 
 impl<'a> Drop for ByteData<'a> {
     fn drop(&mut self) {
-        match unsafe { self.kind }.kind {
-            KIND_EMPTY | KIND_STATIC | KIND_BORROWED => (),
-            #[cfg(feature = "chunk")]
-            KIND_CHUNK => (),
+        match unsafe { self.chunk.kind() } {
+            Kind::Chunk | Kind::Slice => (),
             #[cfg(feature = "alloc")]
-            KIND_SHARED => unsafe {
+            Kind::Shared => unsafe {
                 core::ptr::drop_in_place(&mut self.shared);
+                self.chunk = empty_chunk();
             },
-            _ => unreachable!(),
         }
     }
 }
@@ -141,16 +175,12 @@ impl<'a> ByteData<'a> {
     /// Creates a `ByteData` from a slice of bytes.
     #[inline]
     pub const fn from_static(dat: &'static [u8]) -> Self {
-        let mut a = Self {
-            static_slice: ByteSlice::new(dat),
-        };
-        a.kind.kind = KIND_STATIC;
-        a
+        Self {
+            slice: ByteSlice::new(dat, true),
+        }
     }
 
-    #[cfg(feature = "chunk")]
     /// Creates a `ByteData` from a slice of bytes. The slice must be 14 bytes or less. If the slice is larger, this will panic.
-    #[cfg_attr(docsrs, doc(cfg(feature = "chunk")))]
     #[inline]
     pub const fn from_chunk_slice(dat: &[u8]) -> Self {
         if dat.is_empty() {
@@ -158,29 +188,25 @@ impl<'a> ByteData<'a> {
         } else {
             Self {
                 chunk: WrappedChunk {
-                    kind: KIND_CHUNK,
+                    kind: KIND_CHUNK_MASK,
                     data: crate::byte_chunk::ByteChunk::from_slice(dat),
                 },
             }
         }
     }
 
-    #[cfg(feature = "chunk")]
     /// Creates a `ByteData` from a single byte.
-    #[cfg_attr(docsrs, doc(cfg(feature = "chunk")))]
     #[inline]
     pub const fn from_byte(b0: u8) -> Self {
         Self {
             chunk: WrappedChunk {
-                kind: KIND_CHUNK,
+                kind: KIND_CHUNK_MASK,
                 data: crate::byte_chunk::ByteChunk::from_byte(b0),
             },
         }
     }
 
-    #[cfg(feature = "chunk")]
     /// Creates a `ByteData` from an array of bytes. The array must be 14 bytes or less. If the array is larger, this will panic.
-    #[cfg_attr(docsrs, doc(cfg(feature = "chunk")))]
     #[inline]
     pub const fn from_chunk<const L: usize>(dat: &[u8; L]) -> Self {
         if L == 0 {
@@ -188,7 +214,7 @@ impl<'a> ByteData<'a> {
         } else {
             Self {
                 chunk: WrappedChunk {
-                    kind: KIND_CHUNK,
+                    kind: KIND_CHUNK_MASK,
                     data: crate::byte_chunk::ByteChunk::from_array(dat),
                 },
             }
@@ -199,13 +225,13 @@ impl<'a> ByteData<'a> {
     #[inline]
     pub const fn from_borrowed(dat: &'a [u8]) -> Self {
         if dat.is_empty() {
-            Self::empty()
+            Self {
+                chunk: empty_chunk(),
+            }
         } else {
-            let mut a = Self {
-                borrowed_slice: ByteSlice::new(dat),
-            };
-            a.kind.kind = KIND_BORROWED;
-            a
+            Self {
+                slice: ByteSlice::new(dat, false),
+            }
         }
     }
 
@@ -214,11 +240,9 @@ impl<'a> ByteData<'a> {
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     #[inline]
     pub const fn from_shared(dat: SharedBytes) -> Self {
-        let mut a = Self {
+        Self {
             shared: core::mem::ManuallyDrop::new(dat),
-        };
-        a.kind.kind = KIND_SHARED;
-        a
+        }
     }
 
     #[cfg(feature = "alloc")]
@@ -229,20 +253,17 @@ impl<'a> ByteData<'a> {
         if dat.is_empty() {
             return Self::empty();
         }
-        #[cfg(feature = "chunk")]
         if dat.len() <= 14 {
             return Self {
                 chunk: WrappedChunk {
-                    kind: KIND_CHUNK,
+                    kind: KIND_CHUNK_MASK,
                     data: crate::byte_chunk::ByteChunk::from_slice(dat.as_slice()),
                 },
             };
         }
-        let mut a = Self {
+        Self {
             shared: core::mem::ManuallyDrop::new(dat.into()),
-        };
-        a.kind.kind = KIND_SHARED;
-        a
+        }
     }
 
     #[cfg(feature = "alloc")]
@@ -267,58 +288,46 @@ impl<'a> ByteData<'a> {
 
     /// Returns the underlying byte slice.
     pub const fn as_slice(&self) -> &[u8] {
-        match unsafe { self.kind }.kind {
-            KIND_EMPTY => &[],
-            KIND_STATIC => unsafe { self.static_slice.as_slice() },
-            KIND_BORROWED => unsafe { self.borrowed_slice.as_slice() },
-            #[cfg(feature = "chunk")]
-            KIND_CHUNK => unsafe { self.chunk.data.as_slice() },
+        match unsafe { self.chunk.kind() } {
+            Kind::Chunk => unsafe { self.chunk.data.as_slice() },
+            Kind::Slice => unsafe { self.slice.as_slice() },
             #[cfg(feature = "alloc")]
-            KIND_SHARED => unsafe {
+            Kind::Shared => unsafe {
                 core::mem::transmute::<&core::mem::ManuallyDrop<SharedBytes>, &SharedBytes>(
                     &self.shared,
                 )
             }
             .as_slice(),
-            _ => unreachable!(),
         }
     }
 
     /// Returns the length of the underlying byte slice.
     pub const fn len(&self) -> usize {
-        match unsafe { self.kind }.kind {
-            KIND_EMPTY => 0,
-            KIND_STATIC => unsafe { self.static_slice.len() },
-            KIND_BORROWED => unsafe { self.borrowed_slice.len() },
-            #[cfg(feature = "chunk")]
-            KIND_CHUNK => unsafe { self.chunk.data.len() },
+        match unsafe { self.chunk.kind() } {
+            Kind::Chunk => unsafe { self.chunk.data.len() },
+            Kind::Slice => unsafe { self.slice.len() },
             #[cfg(feature = "alloc")]
-            KIND_SHARED => unsafe {
+            Kind::Shared => unsafe {
                 core::mem::transmute::<&core::mem::ManuallyDrop<SharedBytes>, &SharedBytes>(
                     &self.shared,
                 )
             }
             .len(),
-            _ => unreachable!(),
         }
     }
 
     /// Returns `true` if the underlying byte slice is empty.
     pub const fn is_empty(&self) -> bool {
-        match unsafe { self.kind }.kind {
-            KIND_EMPTY => true,
-            KIND_STATIC => unsafe { self.static_slice.is_empty() },
-            KIND_BORROWED => unsafe { self.borrowed_slice.is_empty() },
-            #[cfg(feature = "chunk")]
-            KIND_CHUNK => unsafe { self.chunk.data.is_empty() },
+        match unsafe { self.chunk.kind() } {
+            Kind::Chunk => unsafe { self.chunk.data.is_empty() },
+            Kind::Slice => unsafe { self.slice.is_empty() },
             #[cfg(feature = "alloc")]
-            KIND_SHARED => unsafe {
+            Kind::Shared => unsafe {
                 core::mem::transmute::<&core::mem::ManuallyDrop<SharedBytes>, &SharedBytes>(
                     &self.shared,
                 )
             }
             .is_empty(),
-            _ => unreachable!(),
         }
     }
 
@@ -351,42 +360,28 @@ impl<'a> ByteData<'a> {
         &self,
         range: R,
     ) -> Self {
-        match unsafe { self.kind }.kind {
-            KIND_EMPTY => {
-                match range.start_bound() {
-                    core::ops::Bound::Unbounded | core::ops::Bound::Included(&0) => (),
-                    _ => panic!("ByteData::sliced: range out of bounds"),
+        match unsafe { self.chunk.kind() } {
+            Kind::Chunk => Self::from_chunk_slice(unsafe { &self.chunk.data.as_slice()[range] }),
+            Kind::Slice => {
+                let a = unsafe { &self.slice };
+                Self {
+                    slice: ByteSlice::new(&a.as_slice()[range], a.is_static()),
                 }
-                match range.end_bound() {
-                    core::ops::Bound::Unbounded
-                    | core::ops::Bound::Included(&0)
-                    | core::ops::Bound::Excluded(&1) => (),
-                    _ => panic!("ByteData::sliced: range out of bounds"),
-                }
-                return Self::empty();
             }
-            KIND_STATIC => Self::from_static(unsafe { &self.static_slice.as_slice()[range] }),
-            KIND_BORROWED => Self::from_borrowed(unsafe { &self.borrowed_slice.as_slice()[range] }),
-            #[cfg(feature = "chunk")]
-            KIND_CHUNK => Self::from_chunk_slice(unsafe { &self.chunk.data.as_slice()[range] }),
             #[cfg(feature = "alloc")]
-            KIND_SHARED => {
+            Kind::Shared => {
                 let dat = unsafe {
                     core::mem::transmute::<&core::mem::ManuallyDrop<SharedBytes>, &SharedBytes>(
                         &self.shared,
                     )
                 };
                 let dat = dat.sliced_range(range);
-                if dat.is_empty() {
-                    return Self::empty();
-                }
-                #[cfg(feature = "chunk")]
                 if dat.len() <= 14 {
-                    return Self::from_chunk_slice(dat.as_slice());
+                    Self::from_chunk_slice(dat.as_slice())
+                } else {
+                    Self::from_shared(dat)
                 }
-                Self::from_shared(dat)
             }
-            _ => unreachable!(),
         }
     }
 
@@ -395,37 +390,18 @@ impl<'a> ByteData<'a> {
         mut self,
         range: R,
     ) -> Self {
-        match unsafe { self.kind }.kind {
-            KIND_EMPTY => {
-                match range.start_bound() {
-                    core::ops::Bound::Unbounded | core::ops::Bound::Included(&0) => (),
-                    _ => panic!("ByteData::into_sliced: range out of bounds"),
-                }
-                match range.end_bound() {
-                    core::ops::Bound::Unbounded
-                    | core::ops::Bound::Included(&0)
-                    | core::ops::Bound::Excluded(&1) => (),
-                    _ => panic!("ByteData::into_sliced: range out of bounds"),
-                }
-                return Self::empty();
-            }
-            KIND_STATIC => {
-                unsafe { self.static_slice = ByteSlice::new(&self.static_slice.as_slice()[range]) };
-                self
-            }
-            KIND_BORROWED => {
-                unsafe {
-                    self.borrowed_slice = ByteSlice::new(&self.borrowed_slice.as_slice()[range])
-                };
-                self
-            }
-            #[cfg(feature = "chunk")]
-            KIND_CHUNK => {
+        match unsafe { self.chunk.kind() } {
+            Kind::Chunk => {
                 unsafe { self.chunk.data.make_sliced(range) };
                 self
             }
+            Kind::Slice => {
+                let a = unsafe { &mut self.slice };
+                *a = ByteSlice::new(&a.as_slice()[range], a.is_static());
+                self
+            }
             #[cfg(feature = "alloc")]
-            KIND_SHARED => {
+            Kind::Shared => {
                 let dat = unsafe {
                     core::mem::transmute::<
                         &mut core::mem::ManuallyDrop<SharedBytes>,
@@ -433,22 +409,15 @@ impl<'a> ByteData<'a> {
                     >(&mut self.shared)
                 };
                 dat.make_sliced_range(range);
-                if dat.is_empty() {
-                    unsafe { core::ptr::drop_in_place(dat) };
-                    core::mem::forget(self);
-                    return Self::empty();
-                }
-                #[cfg(feature = "chunk")]
                 if dat.len() <= 14 {
                     let r = Self::from_chunk_slice(dat.as_slice());
                     unsafe { core::ptr::drop_in_place(dat) };
                     core::mem::forget(self);
-                    return r;
+                    r
+                } else {
+                    self
                 }
-                unsafe { self.kind }.kind = KIND_SHARED;
-                self
             }
-            _ => unreachable!(),
         }
     }
 
@@ -457,33 +426,16 @@ impl<'a> ByteData<'a> {
         &'_ mut self,
         range: R,
     ) {
-        match unsafe { self.kind }.kind {
-            KIND_EMPTY => {
-                match range.start_bound() {
-                    core::ops::Bound::Unbounded | core::ops::Bound::Included(&0) => (),
-                    _ => panic!("ByteData::into_sliced: range out of bounds"),
-                }
-                match range.end_bound() {
-                    core::ops::Bound::Unbounded
-                    | core::ops::Bound::Included(&0)
-                    | core::ops::Bound::Excluded(&1) => (),
-                    _ => panic!("ByteData::into_sliced: range out of bounds"),
-                }
-            }
-            KIND_STATIC => {
-                unsafe { self.static_slice = ByteSlice::new(&self.static_slice.as_slice()[range]) };
-            }
-            KIND_BORROWED => {
-                unsafe {
-                    self.borrowed_slice = ByteSlice::new(&self.borrowed_slice.as_slice()[range])
-                };
-            }
-            #[cfg(feature = "chunk")]
-            KIND_CHUNK => {
+        match unsafe { self.chunk.kind() } {
+            Kind::Chunk => {
                 unsafe { self.chunk.data.make_sliced(range) };
             }
+            Kind::Slice => {
+                let a = unsafe { &mut self.slice };
+                *a = ByteSlice::new(&a.as_slice()[range], a.is_static());
+            }
             #[cfg(feature = "alloc")]
-            KIND_SHARED => {
+            Kind::Shared => {
                 let dat = unsafe {
                     core::mem::transmute::<
                         &mut core::mem::ManuallyDrop<SharedBytes>,
@@ -491,24 +443,17 @@ impl<'a> ByteData<'a> {
                     >(&mut self.shared)
                 };
                 dat.make_sliced_range(range);
-                if dat.is_empty() {
-                    unsafe { core::ptr::drop_in_place(dat) };
-                    self.kind.kind = KIND_EMPTY;
-                }
-                #[cfg(feature = "chunk")]
                 if dat.len() <= 14 {
                     let r = crate::ByteChunk::from_slice(dat.as_slice());
                     unsafe {
                         core::ptr::drop_in_place(dat);
                         self.chunk = DataKind {
-                            kind: KIND_CHUNK,
+                            kind: KIND_CHUNK_MASK,
                             data: r,
                         };
                     }
                 }
-                unsafe { self.kind }.kind = KIND_SHARED;
             }
-            _ => unreachable!(),
         }
     }
 
@@ -516,19 +461,29 @@ impl<'a> ByteData<'a> {
     /// Transform any borrowed data into shared data. This is useful when you wish to change the lifetime of the data.
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     pub fn into_shared<'s>(mut self) -> ByteData<'s> {
-        match unsafe { self.kind }.kind {
-            KIND_EMPTY | KIND_STATIC | KIND_SHARED => unsafe {
+        match unsafe { self.chunk.kind() } {
+            Kind::Chunk | Kind::Shared => unsafe {
                 core::mem::transmute::<ByteData, ByteData>(self)
             },
-            KIND_BORROWED => {
-                let r = SharedBytes::from_slice(unsafe { self.borrowed_slice.as_slice() });
-                self.shared = core::mem::ManuallyDrop::new(r);
-                unsafe { self.kind }.kind = KIND_SHARED;
-                unsafe { core::mem::transmute::<ByteData, ByteData>(self) }
+            Kind::Slice => {
+                let a = unsafe { &self.slice };
+                if a.is_static() {
+                    unsafe { core::mem::transmute::<ByteData, ByteData>(self) }
+                } else if a.len() <= 14 {
+                    let r = crate::byte_chunk::ByteChunk::from_slice(a.as_slice());
+                    core::mem::forget(self);
+                    ByteData {
+                        chunk: DataKind {
+                            kind: KIND_CHUNK_MASK,
+                            data: r,
+                        },
+                    }
+                } else {
+                    let r = SharedBytes::from_slice(a.as_slice());
+                    self.shared = core::mem::ManuallyDrop::new(r);
+                    unsafe { core::mem::transmute::<ByteData, ByteData>(self) }
+                }
             }
-            #[cfg(feature = "chunk")]
-            KIND_CHUNK => unsafe { core::mem::transmute::<ByteData, ByteData>(self) },
-            _ => unreachable!(),
         }
     }
 
@@ -541,39 +496,38 @@ impl<'a> ByteData<'a> {
         mut self,
         range: R,
     ) -> ByteData<'s> {
-        match unsafe { self.kind }.kind {
-            KIND_EMPTY | KIND_STATIC | KIND_SHARED => {
-                self.make_sliced(range);
-                unsafe { core::mem::transmute::<ByteData, ByteData>(self) }
-            }
-            KIND_BORROWED => {
-                let dat = unsafe { self.borrowed_slice.as_slice() };
-                let r = &dat[range];
-                if r.is_empty() {
-                    core::mem::forget(self);
-                    return ByteData::empty();
-                }
+        match unsafe { self.chunk.kind() } {
+            Kind::Chunk => unsafe {
+                self.chunk.data.make_sliced(range);
+                core::mem::transmute::<ByteData, ByteData>(self)
+            },
+            Kind::Shared => unsafe {
+                (*self.shared).make_sliced_range(range);
+                core::mem::transmute::<ByteData, ByteData>(self)
+            },
+            Kind::Slice => {
+                let a = unsafe { &self.slice };
+                let r = &a.as_slice()[range];
                 if r.len() <= 14 {
                     let r = crate::byte_chunk::ByteChunk::from_slice(r);
                     core::mem::forget(self);
                     return ByteData {
                         chunk: DataKind {
-                            kind: KIND_CHUNK,
+                            kind: KIND_CHUNK_MASK,
                             data: r,
                         },
                     };
                 }
+                if a.is_static() {
+                    core::mem::forget(self);
+                    return ByteData {
+                        slice: ByteSlice::new(r, true),
+                    };
+                }
                 let r = SharedBytes::from_slice(r);
                 self.shared = core::mem::ManuallyDrop::new(r);
-                unsafe { self.kind }.kind = KIND_SHARED;
                 unsafe { core::mem::transmute::<ByteData, ByteData>(self) }
             }
-            #[cfg(feature = "chunk")]
-            KIND_CHUNK => {
-                unsafe { self.chunk.data.make_sliced(range) };
-                unsafe { core::mem::transmute::<ByteData, ByteData>(self) }
-            }
-            _ => unreachable!(),
         }
     }
 
@@ -591,13 +545,14 @@ impl<'a> ByteData<'a> {
     /// Consume the `ByteData` until the byte condition is triggered.
     pub fn take_while<F: FnMut(u8) -> bool>(&mut self, mut f: F) -> ByteData<'a> {
         let mut i = 0;
-        while i < self.len() && f(self[i]) {
+        let a = self.as_slice();
+        while i < a.len() && f(a[i]) {
             i += 1;
         }
         if i == 0 {
             return ByteData::empty();
         }
-        if i == self.len() {
+        if i == a.len() {
             return core::mem::replace(self, ByteData::empty());
         }
         let a = self.sliced(0..i);
@@ -673,11 +628,11 @@ impl<'a> ByteData<'a> {
 }
 
 impl ByteData<'static> {
-    /// Returns a `ByteData` with the given range of bytes.
+    /// Forces any borrowed slice to be marked as static.
     #[inline]
     pub fn statically_borrowed(mut self) -> ByteData<'static> {
-        if unsafe { self.kind }.kind == KIND_BORROWED {
-            self.kind.kind = KIND_STATIC;
+        if matches!(unsafe { self.chunk.kind() }, Kind::Slice) {
+            unsafe { self.slice.make_static() };
         }
         unsafe { core::mem::transmute::<ByteData, ByteData>(self) }
     }
@@ -709,14 +664,11 @@ impl<'a> From<&'a [u8]> for ByteData<'a> {
 impl<'a> From<SharedBytes> for ByteData<'a> {
     #[inline]
     fn from(dat: SharedBytes) -> Self {
-        if dat.is_empty() {
-            return Self::empty();
-        }
-        #[cfg(feature = "chunk")]
         if dat.len() <= 14 {
-            return Self::from_chunk_slice(&dat);
+            Self::from_chunk_slice(&dat)
+        } else {
+            Self::from_shared(dat)
         }
-        Self::from_shared(dat)
     }
 }
 
