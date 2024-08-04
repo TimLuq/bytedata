@@ -149,7 +149,8 @@ impl ExtBytes {
             (header, len, ptr)
         };
 
-        let data = alloc::boxed::Box::into_raw(alloc::boxed::Box::new(ExtBytesRef { data, ptr, len }));
+        let data =
+            alloc::boxed::Box::into_raw(alloc::boxed::Box::new(ExtBytesRef { data, ptr, len }));
 
         crate::ByteData {
             external: core::mem::ManuallyDrop::new(ExtBytes {

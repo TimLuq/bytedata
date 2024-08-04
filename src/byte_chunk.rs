@@ -159,3 +159,10 @@ impl Default for ByteChunk {
         unsafe { core::mem::zeroed() }
     }
 }
+
+impl core::fmt::Debug for ByteChunk {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let rend = crate::ByteStringRender::from_slice(self.as_slice());
+        core::fmt::Debug::fmt(&rend, f)
+    }
+}
