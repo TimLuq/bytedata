@@ -3,6 +3,7 @@ use crate::{ByteData, ByteQueue};
 use super::LinkedIter;
 
 /// An iterator over the bytes of a [`ByteQueue`].
+#[allow(missing_debug_implementations)]
 pub struct ByteIter<'a, 'b> {
     inner: LinkedIter<'a, 'b>,
     chunk: Option<&'b ByteData<'a>>,
@@ -23,6 +24,7 @@ impl<'a, 'b> ByteIter<'a, 'b> {
 
     /// Skip the next `n` bytes.
     #[inline]
+    #[must_use]
     pub const fn skip(mut self, n: usize) -> Self {
         self.offset += n;
         if self.offset >= self.len {
@@ -47,6 +49,7 @@ impl<'a, 'b> ByteIter<'a, 'b> {
 
     /// Limit the iterator to at most `n` bytes.
     #[inline]
+    #[must_use]
     pub const fn take(mut self, n: usize) -> Self {
         if self.len() > n {
             self.len = n + self.offset;
@@ -56,14 +59,24 @@ impl<'a, 'b> ByteIter<'a, 'b> {
 
     /// Get the number of bytes remaining in the iterator.
     #[inline]
+    #[must_use]
     pub const fn len(&self) -> usize {
         self.len - self.offset
     }
+
+    /// Get the number of bytes remaining in the iterator.
+    #[inline]
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
+#[allow(single_use_lifetimes)]
 impl<'a, 'b> Iterator for ByteIter<'a, 'b> {
     type Item = u8;
 
+    #[allow(clippy::missing_inline_in_public_items)]
     fn next(&mut self) -> Option<Self::Item> {
         if self.offset >= self.len {
             return None;
@@ -74,7 +87,7 @@ impl<'a, 'b> Iterator for ByteIter<'a, 'b> {
                 break;
             }
             self.chunk = match self.inner.next() {
-                Some(v) => Some(v),
+                Some(vv) => Some(vv),
                 None => return None,
             };
             self.offset -= old_len;
@@ -100,11 +113,11 @@ impl<'a, 'b> Iterator for ByteIter<'a, 'b> {
 
     #[inline]
     fn last(mut self) -> Option<Self::Item> {
-        let l = self.len();
-        if l == 0 {
+        let len = self.len();
+        if len == 0 {
             return None;
         }
-        self.skip_mut(l - 1).next()
+        self.skip_mut(len - 1).next()
     }
 
     #[inline]
@@ -113,27 +126,33 @@ impl<'a, 'b> Iterator for ByteIter<'a, 'b> {
     }
 }
 
+#[allow(single_use_lifetimes)]
 impl<'a, 'b> core::iter::ExactSizeIterator for ByteIter<'a, 'b> {
+    #[inline]
     fn len(&self) -> usize {
         self.len()
     }
 }
 
+#[allow(single_use_lifetimes)]
 impl<'a, 'b> core::iter::FusedIterator for ByteIter<'a, 'b> {}
 
 /// An iterator over the bytes of a [`ByteQueue`].
+#[allow(missing_debug_implementations)]
 pub struct OwnedByteIter<'a> {
     inner: super::ByteQueue<'a>,
 }
 
 impl<'a> OwnedByteIter<'a> {
     #[inline]
-    pub(super) fn new(queue: ByteQueue<'a>) -> Self {
+    #[must_use]
+    pub(super) const fn new(queue: ByteQueue<'a>) -> Self {
         Self { inner: queue }
     }
 
     /// Skip the next `n` bytes.
     #[inline]
+    #[must_use]
     pub fn skip(mut self, n: usize) -> Self {
         self.skip_mut(n);
         self
@@ -142,16 +161,16 @@ impl<'a> OwnedByteIter<'a> {
     /// Skip the next `n` bytes.
     #[inline]
     fn skip_mut(&mut self, mut n: usize) -> &mut Self {
-        while let Some(mut a) = self.inner.pop_front() {
-            if a.len() < n {
-                n -= a.len();
+        while let Some(mut av) = self.inner.pop_front() {
+            if av.len() < n {
+                n -= av.len();
                 continue;
             }
-            if a.len() == n {
+            if av.len() == n {
                 return self;
             }
-            a.make_sliced(n..);
-            self.inner.push_front(a);
+            av.make_sliced(n..);
+            self.inner.push_front(av);
             return self;
         }
         self
@@ -159,14 +178,16 @@ impl<'a> OwnedByteIter<'a> {
 
     /// Limit the iterator to at most `n` bytes.
     #[inline]
+    #[must_use]
     pub fn take(mut self, n: usize) -> Self {
         while self.len() > n {
-            let mut a = self.inner.pop_back().unwrap();
+            // SAFETY: `pop_back` is only called when `self.len() > n`.
+            let mut av = unsafe { self.inner.pop_back().unwrap_unchecked() };
             if self.len() >= n {
                 continue;
             }
-            a.make_sliced(..a.len() - n);
-            self.inner.push_back(a);
+            av.make_sliced(..av.len() - n);
+            self.inner.push_back(av);
             break;
         }
         self
@@ -174,22 +195,31 @@ impl<'a> OwnedByteIter<'a> {
 
     /// Get the number of bytes remaining in the iterator.
     #[inline]
+    #[must_use]
     pub const fn len(&self) -> usize {
         self.inner.len()
     }
+
+    /// Get the number of bytes remaining in the iterator.
+    #[inline]
+    #[must_use]
+    pub const fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
 }
 
-impl<'a> Iterator for OwnedByteIter<'a> {
+impl Iterator for OwnedByteIter<'_> {
     type Item = u8;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        let mut a = self.inner.pop_front()?;
-        let b = a.as_slice()[0];
-        if a.len() > 1 {
-            a.make_sliced(1..);
-            self.inner.push_front(a);
+        let mut av = self.inner.pop_front()?;
+        let bv = av.as_slice()[0];
+        if av.len() > 1 {
+            av.make_sliced(1..);
+            self.inner.push_front(av);
         }
-        Some(b)
+        Some(bv)
     }
 
     #[inline]
@@ -205,9 +235,9 @@ impl<'a> Iterator for OwnedByteIter<'a> {
 
     #[inline]
     fn last(mut self) -> Option<Self::Item> {
-        let a = self.inner.pop_back()?;
-        let b = a.as_slice()[a.len() - 1];
-        Some(b)
+        let av = self.inner.pop_back()?;
+        let bv = av.as_slice()[av.len() - 1];
+        Some(bv)
     }
 
     #[inline]
@@ -216,10 +246,11 @@ impl<'a> Iterator for OwnedByteIter<'a> {
     }
 }
 
-impl<'a> core::iter::ExactSizeIterator for OwnedByteIter<'a> {
+impl core::iter::ExactSizeIterator for OwnedByteIter<'_> {
+    #[inline]
     fn len(&self) -> usize {
         self.len()
     }
 }
 
-impl<'a> core::iter::FusedIterator for OwnedByteIter<'a> {}
+impl core::iter::FusedIterator for OwnedByteIter<'_> {}

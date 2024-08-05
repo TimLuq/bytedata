@@ -67,7 +67,7 @@ static SHARED_BYTES_BVT: super::SBytesVtable = super::SBytesVtable {
 impl From<SharedBytes> for bytes::Bytes {
     #[inline]
     fn from(dat: SharedBytes) -> Self {
-        bytes::Bytes::copy_from_slice(dat.as_slice())
+        Self::copy_from_slice(dat.as_slice())
     }
 }
 
@@ -109,12 +109,16 @@ impl bytes::Buf for SharedBytes {
         self.as_slice()
     }
 
+    #[inline]
     fn advance(&mut self, cnt: usize) {
-        if cnt > self.len as usize {
-            panic!("SharedBytes::advance: index out of bounds");
-        }
-        self.off += cnt as u32;
-        self.len -= cnt as u32;
+        assert!(
+            cnt <= self.len as usize,
+            "SharedBytes::advance: index out of bounds"
+        );
+        #[allow(clippy::cast_possible_truncation)]
+        let cnt = cnt as u32;
+        self.off += cnt;
+        self.len -= cnt;
     }
 
     #[inline]
@@ -122,20 +126,24 @@ impl bytes::Buf for SharedBytes {
         self.len > 0
     }
 
+    #[inline]
     fn copy_to_bytes(&mut self, len: usize) -> bytes::Bytes {
         let currlen = self.len as usize;
-        if len > currlen {
-            panic!("SharedBytes::copy_to_bytes: index out of bounds");
-        }
+        assert!(
+            len <= currlen,
+            "SharedBytes::copy_to_bytes: index out of bounds"
+        );
         if len == 0 {
             return bytes::Bytes::new();
         }
         if len == currlen {
-            return core::mem::replace(self, SharedBytes::empty()).into();
+            return core::mem::replace(self, Self::empty()).into();
         }
         let ret = self.sliced(0, len).into();
-        self.off += len as u32;
-        self.len -= len as u32;
+        #[allow(clippy::cast_possible_truncation)]
+        let len = len as u32;
+        self.off += len;
+        self.len -= len;
         ret
     }
 }

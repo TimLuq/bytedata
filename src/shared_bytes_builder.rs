@@ -2,6 +2,7 @@ use crate::{SharedBytes, SharedBytesMeta};
 
 /// A builder for `SharedBytes`.
 #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+#[allow(missing_debug_implementations)]
 pub struct SharedBytesBuilder {
     /// The total capacity of the buffer.
     pub(crate) len: u32,
@@ -13,12 +14,16 @@ pub struct SharedBytesBuilder {
     pub(crate) align: usize,
 }
 
+// SAFETY: `SharedBytesBuilder` is `Send` and `Sync` because it's safe to share the heap data across threads.
 unsafe impl Send for SharedBytesBuilder {}
+// SAFETY: `SharedBytesBuilder` is `Send` and `Sync` because it's safe to share the heap data across threads.
 unsafe impl Sync for SharedBytesBuilder {}
 
 impl SharedBytesBuilder {
     /// Creates a new `SharedBytesBuilder`.
     #[inline]
+    #[must_use]
+    #[allow(clippy::cast_possible_truncation)]
     pub const fn new() -> Self {
         Self {
             len: 0,
@@ -30,6 +35,7 @@ impl SharedBytesBuilder {
 
     /// Creates a new `SharedBytesBuilder`.
     #[inline]
+    #[must_use]
     pub const fn with_alignment(alignment: usize) -> Self {
         let align = alignment.next_power_of_two();
         assert!(
@@ -54,23 +60,13 @@ impl SharedBytesBuilder {
         }
     }
 
-    /// Creates a new `SharedBytesBuilder` with at least the specified capacity. The maximum capacity is `0xFFFF_FFF0` or `isize::MAX - 15`, whichever is lower.
-    #[inline]
-    pub fn with_capacity(cap: usize) -> Self {
-        if cap == 0 {
-            return Self::new();
-        }
-        Self::with_capacity_u32(cap as u32, core::mem::align_of::<SharedBytesMeta>())
-    }
-
-    /// Creates a new `SharedBytesBuilder` with at least the specified capacity. The maximum capacity is `0xFFFF_FFF0 - align` or `isize::MAX - 15 - align`, whichever is lower.
-    pub fn with_aligned_capacity(cap: usize, alignment: usize) -> Self {
+    const fn cap_check(cap: usize, alignment: usize) -> usize {
         const MAX_CAP: usize = if isize::BITS <= 32 {
             isize::MAX as usize
         } else {
             0xFFFF_FFFF
         };
-        let align = if alignment < core::mem::align_of::<SharedBytesMeta>() {
+        let alignment = if alignment < core::mem::align_of::<SharedBytesMeta>() {
             core::mem::align_of::<SharedBytesMeta>()
         } else {
             alignment
@@ -80,29 +76,54 @@ impl SharedBytesBuilder {
             cap <= max_cap,
             "SharedBytesBuilder::with_aligned_capacity: capacity too large"
         );
+        alignment
+    }
+
+    /// Creates a new `SharedBytesBuilder` with at least the specified capacity. The maximum capacity is `0xFFFF_FFF0` or `isize::MAX - 15`, whichever is lower.
+    #[inline]
+    #[must_use]
+    #[allow(clippy::cast_possible_truncation)]
+    pub fn with_capacity(cap: usize) -> Self {
         if cap == 0 {
-            return Self::with_alignment(align);
+            return Self::new();
         }
+        let align = Self::cap_check(cap, core::mem::align_of::<SharedBytesMeta>());
+        Self::with_capacity_u32(cap as u32, align)
+    }
+
+    /// Creates a new `SharedBytesBuilder` with at least the specified capacity. The maximum capacity is `0xFFFF_FFF0 - align` or `isize::MAX - 15 - align`, whichever is lower.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the capacity is too large.
+    #[inline]
+    #[must_use]
+    pub fn with_aligned_capacity(cap: usize, alignment: usize) -> Self {
+        if cap == 0 {
+            return Self::with_alignment(alignment);
+        }
+        assert!(alignment <= 512, "SharedBytesBuilder::with_aligned_capacity: alignment must be less than or equal to 512");
+        let align = Self::cap_check(cap, core::mem::align_of::<SharedBytesMeta>());
         let align2 = alignment.next_power_of_two();
         assert!(
             align2 == alignment,
             "SharedBytesBuilder::with_aligned_capacity: alignment must be a power of two"
         );
-        assert!(alignment <= 512, "SharedBytesBuilder::with_aligned_capacity: alignment must be less than or equal to 512");
-        Self::with_capacity_u32(cap as u32, align)
+        #[allow(clippy::cast_possible_truncation)]
+        let cap = cap as u32;
+        Self::with_capacity_u32(cap, align)
     }
 
     fn with_capacity_u32(cap: u32, align: usize) -> Self {
         let off = SharedBytesMeta::compute_start_offset(align);
         let len = cap + off;
-        let layout = alloc::alloc::Layout::from_size_align(len as usize, align).unwrap();
-        let ptr = unsafe {
-            let ptr = alloc::alloc::alloc(layout);
-            if ptr.is_null() {
-                alloc::alloc::handle_alloc_error(layout);
-            }
-            ptr
-        };
+        #[allow(clippy::unwrap_used)]
+        let layout = core::alloc::Layout::from_size_align(len as usize, align).unwrap();
+        // SAFETY: the layout must be valid
+        let ptr = unsafe { alloc::alloc::alloc(layout) };
+        if ptr.is_null() {
+            alloc::alloc::handle_alloc_error(layout);
+        }
         Self {
             len,
             off,
@@ -151,69 +172,101 @@ impl SharedBytesBuilder {
             return;
         }
         let ptr = if self.len == 0 {
-            unsafe {
-                let layout = alloc::alloc::Layout::from_size_align(new_len, self.align).unwrap();
-                let p = alloc::alloc::alloc(layout);
-                if p.is_null() {
-                    alloc::alloc::handle_alloc_error(layout);
-                }
-                p
+            #[allow(clippy::unwrap_used)]
+            let layout = core::alloc::Layout::from_size_align(new_len, self.align).unwrap();
+            // SAFETY: the layout must be valid
+            let ptr = unsafe { alloc::alloc::alloc(layout) };
+            if ptr.is_null() {
+                alloc::alloc::handle_alloc_error(layout);
             }
+            ptr
         } else {
             let start_off = SharedBytesMeta::compute_start_offset(self.align) as usize;
-            unsafe {
-                let old_layout =
-                    alloc::alloc::Layout::from_size_align(self.len as usize, self.align).unwrap();
-                let mut ptr = alloc::alloc::realloc(self.dat, old_layout, new_len);
+            #[allow(clippy::unwrap_used)]
+            let old_layout =
+                core::alloc::Layout::from_size_align(self.len as usize, self.align).unwrap();
+            // SAFETY: `old_layout` is the layout of the old allocation.
+            let mut ptr = unsafe { alloc::alloc::realloc(self.dat, old_layout, new_len) };
+            if ptr.is_null() {
+                #[allow(clippy::unwrap_used)]
+                let layout = core::alloc::Layout::from_size_align(new_len, self.align).unwrap();
+                // SAFETY: the layout must be valid
+                ptr = unsafe { alloc::alloc::alloc(layout) };
                 if ptr.is_null() {
-                    let layout =
-                        alloc::alloc::Layout::from_size_align(new_len, self.align).unwrap();
-                    ptr = alloc::alloc::alloc(layout);
-                    let src = self.dat.add(start_off);
-                    let dst = ptr.add(start_off);
-                    dst.copy_from_nonoverlapping(src, self.off as usize - start_off);
-                    alloc::alloc::dealloc(self.dat, old_layout);
+                    alloc::alloc::handle_alloc_error(layout);
                 }
-                ptr
+                // SAFETY: `start_off` is always less than or equal to `len`.
+                let src = unsafe { self.dat.add(start_off) };
+                // SAFETY: `start_off` is always less than or equal to `len`.
+                let dst = unsafe { ptr.add(start_off) };
+                // SAFETY: `start_off` is always less than or equal to `len`.
+                unsafe {
+                    dst.copy_from_nonoverlapping(src, self.off as usize - start_off);
+                };
+                // SAFETY: `old_layout` is the layout of the old allocation.
+                unsafe {
+                    alloc::alloc::dealloc(self.dat, old_layout);
+                };
             }
+            ptr
         };
-        self.len = new_len as u32;
+        #[allow(clippy::cast_possible_truncation)]
+        let new_len = new_len as u32;
+        self.len = new_len;
         self.dat = ptr;
     }
 
     /// Pushes a slice of bytes to the end of the buffer.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the slice is too large to append to the existing data.
+    #[inline]
     pub fn extend_from_slice(&mut self, dat: &[u8]) {
+        fn extend_from_slice_inner(builder: &mut SharedBytesBuilder, dat: &[u8]) {
+            let off = builder.off as usize;
+
+            #[allow(clippy::panic)]
+            let new_off = match off.checked_add(dat.len()) {
+                Some(new_off) if new_off <= 0xFFFF_FFFF => new_off,
+                _ => {
+                    panic!("SharedBytesBuilder::extend_from_slice: slice too large to append to existing data");
+                }
+            };
+
+            // reallocate if necessary
+            if new_off > builder.len as usize {
+                let new_len = if new_off > 0x0000_8000 {
+                    (new_off & 0xFFFF_8000)
+                        .saturating_add(0x0000_8000)
+                        .min(0xFFFF_FFFF)
+                } else {
+                    new_off.next_power_of_two()
+                };
+                builder.reserve_exact(new_len);
+            }
+
+            // SAFETY: `off` is always less than or equal to the allocated `len`.
+            let dest = unsafe { builder.dat.add(off) };
+            let len = dat.len();
+
+            // SAFETY: `dest` is a valid pointer to `len` bytes.
+            unsafe {
+                core::ptr::copy_nonoverlapping(dat.as_ptr(), dest, len);
+            };
+            #[allow(clippy::cast_possible_truncation)]
+            let new_off = new_off as u32;
+            builder.off = new_off;
+        }
+
         if dat.is_empty() {
             return;
         }
-        let new_off = match (self.off as usize).checked_add(dat.len()) {
-            Some(new_off) if new_off <= 0xFFFF_FFFF => new_off,
-            _ => {
-                panic!("SharedBytesBuilder::extend_from_slice: slice too large to append to existing data");
-            }
-        };
-
-        // reallocate if necessary
-        if new_off > self.len as usize {
-            let new_len = if new_off > 0x0000_8000 {
-                (new_off & 0xFFFF_8000)
-                    .saturating_add(0x0000_8000)
-                    .min(0xFFFF_FFFF)
-            } else {
-                new_off.next_power_of_two()
-            };
-            self.reserve_exact(new_len);
-        }
-
-        unsafe {
-            self.dat
-                .offset(self.off as isize)
-                .copy_from(dat.as_ptr(), dat.len());
-        }
-        self.off += dat.len() as u32;
+        extend_from_slice_inner(self, dat);
     }
 
     /// Clear the buffer.
+    #[inline]
     pub fn clear(&mut self) {
         if self.len == 0 {
             return;
@@ -223,10 +276,12 @@ impl SharedBytesBuilder {
     }
 
     /// Truncates the buffer. This method does nothing if the buffer contains less than `len` bytes.
+    #[inline]
     pub fn truncate(&mut self, len: usize) {
         if self.len == 0 {
             return;
         }
+        #[allow(clippy::cast_possible_truncation)]
         let data_off = SharedBytesMeta::compute_start_offset(self.align).saturating_add(len as u32);
         if self.off > data_off {
             self.off = data_off;
@@ -234,48 +289,62 @@ impl SharedBytesBuilder {
     }
 
     /// Freezes the builder and returns a [`SharedBytes`] representing the data.
+    #[inline]
+    #[must_use]
     pub fn build(self) -> SharedBytes {
-        let slf = core::mem::ManuallyDrop::new(self);
-        let len = slf.len;
-        if len == 0 {
-            return SharedBytes {
-                len: 0,
-                off: 0,
-                dat_addr: 0,
-            };
-        }
-        let align = slf.align;
-        let data_off = SharedBytesMeta::compute_start_offset(align);
-        let off = slf.off;
-        let dat = slf.dat;
-        if data_off == off {
-            if !dat.is_null() {
-                unsafe {
-                    let layout =
-                        alloc::alloc::Layout::from_size_align(len as usize, align).unwrap();
-                    alloc::alloc::dealloc(dat, layout);
+        #[allow(clippy::needless_pass_by_value)]
+        fn build_inner(slf: core::mem::ManuallyDrop<SharedBytesBuilder>) -> SharedBytes {
+            #[allow(clippy::declare_interior_mutable_const)]
+            const INIT: SharedBytesMeta = SharedBytesMeta::new().with_refcount(1);
+
+            let len = slf.len;
+            let align = slf.align;
+            let data_off = SharedBytesMeta::compute_start_offset(align);
+            let off = slf.off;
+            let dat = slf.dat;
+            if data_off == off {
+                if !dat.is_null() {
+                    #[allow(clippy::unwrap_used)]
+                    let layout = core::alloc::Layout::from_size_align(len as usize, align).unwrap();
+                    // SAFETY: the layout must have been allocated
+                    unsafe {
+                        alloc::alloc::dealloc(dat, layout);
+                    };
                 }
+                return SharedBytes {
+                    len: 0,
+                    off: 0,
+                    dat_addr: 0,
+                };
             }
+            #[allow(clippy::cast_ptr_alignment)]
+            let meta = dat.cast::<SharedBytesMeta>();
+            // SAFETY: `meta` is a valid pointer to a `SharedBytesMeta`.
+            unsafe { meta.write(INIT.with_align(align).with_len(len)) };
+            let dat_addr = dat as usize as u64;
+            let dat_addr = dat_addr.to_le();
+            SharedBytes {
+                len: off - data_off,
+                off: data_off,
+                dat_addr,
+            }
+        }
+
+        let this = core::mem::ManuallyDrop::new(self);
+        if this.len == 0 {
             return SharedBytes {
                 len: 0,
                 off: 0,
                 dat_addr: 0,
             };
         }
-        #[allow(clippy::declare_interior_mutable_const)]
-        const INIT: SharedBytesMeta = SharedBytesMeta::new().with_refcount(1);
-        unsafe { (dat as *mut SharedBytesMeta).write(INIT.with_align(align).with_len(len)) };
-        let dat_addr = dat as usize as u64;
-        let dat_addr = dat_addr.to_le();
-        SharedBytes {
-            len: off - data_off,
-            off: data_off,
-            dat_addr,
-        }
+
+        build_inner(this)
     }
 
     /// Returns total the number of bytes currently available in the buffer.
     #[inline]
+    #[must_use]
     pub const fn capacity(&self) -> usize {
         if self.len == 0 {
             return 0;
@@ -286,6 +355,7 @@ impl SharedBytesBuilder {
 
     /// Returns the number of bytes currently written to in the buffer.
     #[inline]
+    #[must_use]
     pub const fn len(&self) -> usize {
         let data_off = SharedBytesMeta::compute_start_offset(self.align);
         (self.off - data_off) as usize
@@ -293,6 +363,7 @@ impl SharedBytesBuilder {
 
     /// Returns `true` if the buffer is empty.
     #[inline]
+    #[must_use]
     pub const fn is_empty(&self) -> bool {
         if self.len == 0 {
             return true;
@@ -302,6 +373,8 @@ impl SharedBytesBuilder {
     }
 
     /// Returns the bytes as a slice.
+    #[inline]
+    #[must_use]
     pub const fn as_slice(&self) -> &[u8] {
         if self.len == 0 {
             return &[];
@@ -310,15 +383,15 @@ impl SharedBytesBuilder {
         if self.off == data_off {
             return &[];
         }
-        unsafe {
-            core::slice::from_raw_parts(
-                self.dat.offset(data_off as isize),
-                (self.off - data_off) as usize,
-            )
-        }
+        // SAFETY: `data_off` is the start offset of the data.
+        let dat = unsafe { self.dat.add(data_off as usize) };
+        let len = (self.off - data_off) as usize;
+        // SAFETY: `len` is the length of the data.
+        unsafe { core::slice::from_raw_parts(dat, len) }
     }
 
     /// Returns the bytes as a mut slice.
+    #[inline]
     pub fn as_slice_mut(&mut self) -> &mut [u8] {
         if self.len == 0 {
             return &mut [];
@@ -327,55 +400,68 @@ impl SharedBytesBuilder {
         if self.off == data_off {
             return &mut [];
         }
-        unsafe {
-            core::slice::from_raw_parts_mut(
-                self.dat.offset(data_off as isize),
-                (self.off - data_off) as usize,
-            )
-        }
+        // SAFETY: `data_off` is the start offset of the data.
+        let dat = unsafe { self.dat.add(data_off as usize) };
+        let len = (self.off - data_off) as usize;
+        // SAFETY: `len` is the length of the data.
+        unsafe { core::slice::from_raw_parts_mut(dat, len) }
     }
 
     /// Apply a function to the unused reserved bytes.
     ///
     /// The function is passed a mutable slice of `MaybeUninit<u8>` and returns a tuple of the return value and the number of bytes filled.
-    pub fn apply_unfilled<R, F>(&mut self, f: F) -> R
+    ///
+    /// # Panics
+    ///
+    /// Panics if the `fun` function returns a length greater than the reserved capacity.
+    #[inline]
+    pub fn apply_unfilled<R, F>(&mut self, fun: F) -> R
     where
         F: FnOnce(&mut [core::mem::MaybeUninit<u8>]) -> (R, usize),
     {
         let data = if self.len == 0 || self.off == self.len {
             &mut [] as &mut [core::mem::MaybeUninit<u8>]
         } else {
-            let off = self.off as isize;
-            unsafe {
-                core::slice::from_raw_parts_mut(
-                    self.dat.offset(off) as *mut core::mem::MaybeUninit<u8>,
-                    self.len as usize - off as usize,
-                )
-            }
+            let off = self.off as usize;
+            // SAFETY: `off` is always less than or equal to `len`.
+            let dat = unsafe { self.dat.add(off) };
+            let dat = dat.cast::<core::mem::MaybeUninit<u8>>();
+            let len = self.len as usize - off;
+            // SAFETY: `len` is the allocated length minus the start offset
+            unsafe { core::slice::from_raw_parts_mut(dat, len) }
         };
-        let (ret, len) = f(data);
-        assert!(len <= data.len());
-        self.len += len as u32;
+        let (ret, len) = fun(data);
+        assert!(
+            len <= data.len(),
+            "SharedBytesBuilder::apply_unfilled: returned length exceeds reserved capacity"
+        );
+        #[allow(clippy::cast_possible_truncation)]
+        {
+            self.len += len as u32;
+        };
         ret
     }
 }
 
 impl Default for SharedBytesBuilder {
+    #[inline]
     fn default() -> Self {
         Self::new()
     }
 }
 
 impl Drop for SharedBytesBuilder {
+    #[inline]
+    #[allow(clippy::unwrap_used)]
     fn drop(&mut self) {
         if self.len == 0 {
             return;
         }
+        let layout = core::alloc::Layout::from_size_align(self.len as usize, self.align).unwrap();
+        // SAFETY: `len` is the allocated length.
         unsafe {
-            let layout =
-                alloc::alloc::Layout::from_size_align(self.len as usize, self.align).unwrap();
             alloc::alloc::dealloc(self.dat, layout);
-        }
+        };
     }
 }
 
@@ -395,6 +481,7 @@ impl AsMut<[u8]> for SharedBytesBuilder {
 
 impl core::ops::Deref for SharedBytesBuilder {
     type Target = [u8];
+
     #[inline]
     fn deref(&self) -> &[u8] {
         self.as_slice()
@@ -409,6 +496,7 @@ impl core::ops::DerefMut for SharedBytesBuilder {
 }
 
 impl core::iter::Extend<u8> for SharedBytesBuilder {
+    #[inline]
     fn extend<I: IntoIterator<Item = u8>>(&mut self, iter: I) {
         for i in iter {
             self.extend_from_slice(&[i]);
@@ -417,6 +505,7 @@ impl core::iter::Extend<u8> for SharedBytesBuilder {
 }
 
 impl<'a> core::iter::Extend<&'a [u8]> for SharedBytesBuilder {
+    #[inline]
     fn extend<I: IntoIterator<Item = &'a [u8]>>(&mut self, iter: I) {
         for i in iter {
             self.extend_from_slice(i);
@@ -425,6 +514,7 @@ impl<'a> core::iter::Extend<&'a [u8]> for SharedBytesBuilder {
 }
 
 impl<'a> core::iter::Extend<&'a str> for SharedBytesBuilder {
+    #[inline]
     fn extend<I: IntoIterator<Item = &'a str>>(&mut self, iter: I) {
         for i in iter {
             self.extend_from_slice(i.as_bytes());
@@ -433,6 +523,8 @@ impl<'a> core::iter::Extend<&'a str> for SharedBytesBuilder {
 }
 
 impl core::fmt::Write for SharedBytesBuilder {
+    #[inline]
+    #[allow(clippy::min_ident_chars)]
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
         self.extend_from_slice(s.as_bytes());
         Ok(())
@@ -440,61 +532,45 @@ impl core::fmt::Write for SharedBytesBuilder {
 }
 
 impl core::fmt::LowerHex for SharedBytesBuilder {
+    #[inline]
+    #[allow(clippy::min_ident_chars)]
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let s = self.as_slice();
-        if let Some(w) = f.width() {
-            if w > s.len() * 2 {
-                for _ in 0..w - s.len() * 2 {
-                    core::fmt::Write::write_str(f, "0")?;
-                }
-            }
-        }
-        let mut i = 0;
-        while i < s.len() {
-            write!(f, "{:02x}", s[i])?;
-            i += 1;
-        }
-        Ok(())
+        crate::byte_string_render::lower_hex_slice(self.as_slice(), f)
     }
 }
 
 impl core::fmt::UpperHex for SharedBytesBuilder {
+    #[inline]
+    #[allow(clippy::min_ident_chars)]
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        let s = self.as_slice();
-        if let Some(w) = f.width() {
-            if w > s.len() * 2 {
-                for _ in 0..w - s.len() * 2 {
-                    core::fmt::Write::write_str(f, "0")?;
-                }
-            }
-        }
-        let mut i = 0;
-        while i < s.len() {
-            write!(f, "{:02X}", s[i])?;
-            i += 1;
-        }
-        Ok(())
+        crate::byte_string_render::upper_hex_slice(self.as_slice(), f)
     }
 }
 
 #[cfg(feature = "core_io_borrowed_buf")]
 #[cfg_attr(docsrs, doc(cfg(feature = "core_io_borrowed_buf")))]
+#[allow(clippy::multiple_inherent_impl)]
 impl SharedBytesBuilder {
     /// Apply a function to the unused reserved bytes.
-    pub fn apply_borrowed_buf<'this, R, F>(&'this mut self, f: F) -> R
+    #[inline]
+    pub fn apply_borrowed_buf<'this, R, F>(&'this mut self, fun: F) -> R
     where
         F: FnOnce(&mut core::io::BorrowedBuf<'this>) -> R,
     {
-        let off = self.off as isize;
+        let off = self.off as usize;
         let mut bb = if self.len == 0 {
             core::io::BorrowedBuf::from(&mut [] as &mut [u8])
         } else {
-            let data = unsafe { self.dat.offset(off) as *mut core::mem::MaybeUninit<u8> };
-            let data =
-                unsafe { core::slice::from_raw_parts_mut(data, self.len as usize - off as usize) };
+            // SAFETY: `off` is always less than or equal to `len`.
+            let data = unsafe { self.dat.add(off) };
+            let data = data.cast::<core::mem::MaybeUninit<u8>>();
+            let len = self.len as usize - off;
+            // SAFETY: `len` is the allocated length minus the start offset
+            let data = unsafe { core::slice::from_raw_parts_mut(data, len) };
             core::io::BorrowedBuf::from(data)
         };
-        let ret = f(&mut bb);
+        let ret = fun(&mut bb);
+        #[allow(clippy::cast_possible_truncation)]
         let len = bb.len() as u32;
         self.len += len;
         ret

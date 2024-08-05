@@ -1,7 +1,7 @@
 #[cfg(feature = "alloc")]
 #[test]
 fn test_bytedata_bytes_1_static() {
-    let s0: ::bytes_1::Bytes = ::bytes_1::Bytes::from_static(b"hello world");
+    let s0 = ::bytes_1::Bytes::from_static(b"hello world");
     let s0 = crate::bytedata::ByteData::from(s0);
     #[cfg(not(feature = "bytes_1_safe"))]
     assert!(matches!(
@@ -10,6 +10,7 @@ fn test_bytedata_bytes_1_static() {
     ));
     #[cfg(feature = "bytes_1_safe")]
     assert!(matches!(
+        // SAFETY: chunk.kind() is safe to call for all types
         unsafe { s0.chunk.kind() },
         crate::bytedata::Kind::Shared
     ));
@@ -19,9 +20,10 @@ fn test_bytedata_bytes_1_static() {
 #[cfg(feature = "alloc")]
 #[test]
 fn test_bytedata_bytes_1_borrowed() {
-    let s0: ::bytes_1::Bytes = ::bytes_1::Bytes::copy_from_slice(b"hello world");
+    let s0 = ::bytes_1::Bytes::copy_from_slice(b"hello world");
     let s0 = crate::bytedata::ByteData::from(s0);
     assert!(matches!(
+        // SAFETY: chunk.kind() is safe to call for all types
         unsafe { s0.chunk.kind() },
         crate::bytedata::Kind::Shared
     ));
@@ -35,6 +37,7 @@ fn test_bytedata_bytes_1_boxed() {
         ::bytes_1::Bytes::from(alloc::boxed::Box::<[u8]>::from(b"hello world".as_slice()));
     let s0 = crate::bytedata::ByteData::from(s0);
     assert!(matches!(
+        // SAFETY: chunk.kind() is safe to call for all types
         unsafe { s0.chunk.kind() },
         crate::bytedata::Kind::Shared
     ));
@@ -48,6 +51,7 @@ fn test_bytedata_bytes_1_vec_exact() {
         ::bytes_1::Bytes::from(alloc::vec::Vec::<u8>::from(b"hello world".as_slice()));
     let s0 = crate::bytedata::ByteData::from(s0);
     assert!(matches!(
+        // SAFETY: chunk.kind() is safe to call for all types
         unsafe { s0.chunk.kind() },
         crate::bytedata::Kind::Shared
     ));
@@ -62,6 +66,7 @@ fn test_bytedata_bytes_1_vec_extra() {
     let s0: ::bytes_1::Bytes = ::bytes_1::Bytes::from(s0);
     let s0 = crate::bytedata::ByteData::from(s0);
     assert!(matches!(
+        // SAFETY: chunk.kind() is safe to call for all types
         unsafe { s0.chunk.kind() },
         crate::bytedata::Kind::Shared
     ));

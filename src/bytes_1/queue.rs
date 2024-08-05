@@ -4,14 +4,17 @@ use crate::ByteQueue;
 
 #[cfg_attr(docsrs, doc(cfg(feature = "bytes_1")))]
 #[cfg_attr(docsrs, doc(cfg(feature = "queue")))]
-impl From<ByteQueue<'_>> for bytes::Bytes {
-    fn from(mut dat: ByteQueue) -> Self {
+impl<'a> From<ByteQueue<'a>> for bytes::Bytes {
+    #[allow(clippy::missing_inline_in_public_items)]
+    fn from(mut dat: ByteQueue<'a>) -> Self {
         use bytes::BufMut;
         if dat.is_empty() {
-            return bytes::Bytes::new();
+            return Self::new();
         }
         if dat.chunk_len() == 1 {
-            return dat.pop_back().unwrap().into();
+            #[allow(clippy::expect_used)]
+            let chunk = dat.pop_front().expect("ByteQueue::from: chunk_len is 1");
+            return chunk.into();
         }
         let mut ret = bytes::BytesMut::with_capacity(dat.len());
         for chunk in dat.chunks() {
@@ -42,19 +45,21 @@ impl bytes::Buf for ByteQueue<'_> {
 
     #[inline]
     fn chunk(&self) -> &[u8] {
-        self.front().map(|s| s.as_slice()).unwrap_or_default()
+        self.front()
+            .map(crate::ByteData::as_slice)
+            .unwrap_or_default()
     }
 
+    #[inline]
     fn advance(&mut self, mut cnt: usize) {
-        if cnt > self.len() {
-            panic!("ByteData::advance: index out of bounds");
-        }
+        assert!(cnt <= self.len(), "ByteData::advance: index out of bounds");
         while cnt > 0 {
-            let mut f = self.pop_front().unwrap();
-            let len = f.len();
+            #[allow(clippy::unwrap_used)]
+            let mut front = self.pop_front().unwrap();
+            let len = front.len();
             if len > cnt {
-                f.make_sliced(cnt..);
-                self.push_front(f);
+                front.make_sliced(cnt..);
+                self.push_front(front);
                 return;
             }
             cnt -= len;
@@ -66,39 +71,43 @@ impl bytes::Buf for ByteQueue<'_> {
         !self.is_empty()
     }
 
+    #[allow(clippy::missing_inline_in_public_items)]
     fn copy_to_bytes(&mut self, mut len: usize) -> bytes::Bytes {
         use bytes::BufMut;
         let currlen = self.len();
-        if len > currlen {
-            panic!("ByteData::copy_to_bytes: index out of bounds");
-        }
+        assert!(
+            len <= currlen,
+            "ByteData::copy_to_bytes: index out of bounds"
+        );
         if len == 0 {
             return bytes::Bytes::new();
         }
-        let mut f = self.pop_front().unwrap();
-        if f.len() == len {
-            return f.into();
+        #[allow(clippy::unwrap_used)]
+        let mut first = self.pop_front().unwrap();
+        if first.len() == len {
+            return first.into();
         }
-        if f.len() > len {
-            let r = f.copy_to_bytes(len);
-            self.push_front(f);
-            return r;
+        if first.len() > len {
+            let ret = first.copy_to_bytes(len);
+            self.push_front(first);
+            return ret;
         }
 
         let mut ret = bytes::BytesMut::with_capacity(len);
-        ret.put(f.as_slice());
-        len -= f.len();
+        ret.put(first.as_slice());
+        len -= first.len();
         while len > 0 {
-            let mut f = self.pop_front().unwrap();
-            let l = f.len();
-            if l > len {
-                ret.put(&f.as_slice()[..len]);
-                f.make_sliced(len..);
-                self.push_front(f);
+            #[allow(clippy::unwrap_used)]
+            let mut fchunk = self.pop_front().unwrap();
+            let fl = fchunk.len();
+            if fl > len {
+                ret.put(&fchunk.as_slice()[..len]);
+                fchunk.make_sliced(len..);
+                self.push_front(fchunk);
                 break;
             }
-            ret.put(f.as_slice());
-            len -= l;
+            ret.put(fchunk.as_slice());
+            len -= fl;
         }
         ret.freeze()
     }

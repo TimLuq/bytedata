@@ -18,6 +18,7 @@ pub struct ByteQueue<'a> {
 impl<'a> ByteQueue<'a> {
     /// Create a new empty `ByteQueue`.
     #[inline]
+    #[must_use]
     pub const fn new() -> Self {
         Self {
             queue: LinkedRoot::new(),
@@ -27,6 +28,7 @@ impl<'a> ByteQueue<'a> {
 
     /// Create a new `ByteQueue` with a single chunk.
     #[inline]
+    #[must_use]
     pub const fn with_item(data: ByteData<'a>) -> Self {
         let remain = data.len();
         Self {
@@ -38,6 +40,7 @@ impl<'a> ByteQueue<'a> {
     #[cfg(feature = "alloc")]
     /// Checks if the queue is full. When the feature `alloc` is enabled, this will always return `false`.
     #[inline]
+    #[must_use]
     pub const fn is_full(&self) -> bool {
         false
     }
@@ -45,12 +48,14 @@ impl<'a> ByteQueue<'a> {
     #[cfg(not(feature = "alloc"))]
     /// Checks if the queue is full. When the feature `alloc` is enabled, this will always return `false`.
     #[inline]
+    #[must_use]
     pub const fn is_full(&self) -> bool {
         self.queue.len() == self.queue.data.data.len()
     }
 
     /// Append bytes to the queue.
-    pub fn push_back(&mut self, data: impl Into<ByteData<'a>>) {
+    #[inline]
+    pub fn push_back<I: Into<ByteData<'a>>>(&mut self, data: I) {
         let data = data.into();
         if data.is_empty() {
             return;
@@ -60,7 +65,8 @@ impl<'a> ByteQueue<'a> {
     }
 
     /// Prepend bytes into the queue.
-    pub fn push_front(&mut self, data: impl Into<ByteData<'a>>) {
+    #[inline]
+    pub fn push_front<I: Into<ByteData<'a>>>(&mut self, data: I) {
         let data = data.into();
         if data.is_empty() {
             return;
@@ -71,135 +77,157 @@ impl<'a> ByteQueue<'a> {
 
     /// Remove bytes from the front of the queue.
     #[inline]
+    #[must_use]
     pub fn pop_front(&mut self) -> Option<ByteData<'a>> {
-        let a = self.queue.pop_front()?;
-        self.remain -= a.len();
-        Some(a)
+        let aa = self.queue.pop_front()?;
+        self.remain -= aa.len();
+        Some(aa)
     }
 
     /// Remove bytes from the back of the queue.
     #[inline]
+    #[must_use]
     pub fn pop_back(&mut self) -> Option<ByteData<'a>> {
-        let a = self.queue.pop_back()?;
-        self.remain -= a.len();
-        Some(a)
+        let aa = self.queue.pop_back()?;
+        self.remain -= aa.len();
+        Some(aa)
     }
 
     /// Get the first chunk in the queue.
     #[inline]
+    #[must_use]
     pub fn front(&self) -> Option<&ByteData<'a>> {
         self.queue.front()
     }
 
     /// Get the last chunk in the queue.
     #[inline]
+    #[must_use]
     pub fn back(&self) -> Option<&ByteData<'a>> {
         self.queue.back()
     }
 
     /// Check if there are no bytes in the queue.
     #[inline]
+    #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.remain == 0
     }
 
     /// The amount of bytes in the queue.
     #[inline]
+    #[must_use]
     pub const fn len(&self) -> usize {
         self.remain
     }
 
     /// The amount of chunks in the queue.
     #[inline]
+    #[must_use]
     pub const fn chunk_len(&self) -> usize {
         self.queue.len()
     }
 
     /// Iterates over each chunk in the queue.
     #[inline]
+    #[must_use]
     pub fn chunks(&self) -> super::LinkedIter<'a, '_> {
         self.queue.iter()
     }
 
     /// Advance the queue by a certain amount of bytes.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the index is out of bounds.
+    #[inline]
     pub fn consume(&mut self, mut cnt: usize) {
-        if cnt > self.len() {
-            panic!("ByteData::advance: index out of bounds");
-        }
+        assert!(cnt <= self.len(), "ByteData::advance: index out of bounds");
         while cnt > 0 {
-            let mut f = self.pop_front().unwrap();
-            let len = f.len();
+            #[allow(clippy::unwrap_used)]
+            let mut front = self.pop_front().unwrap();
+            let len = front.len();
             if len > cnt {
-                f.make_sliced(cnt..);
-                self.push_front(f);
+                front.make_sliced(cnt..);
+                self.push_front(front);
                 return;
             }
             cnt -= len;
         }
     }
 
+    /// Check if there are remaining bytes in the queue.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the range is out of bounds.
     pub(super) fn check_range(&self, range: impl RangeBounds<usize>) -> (usize, usize) {
         let max = match range.end_bound() {
-            core::ops::Bound::Excluded(0) => 0,
-            core::ops::Bound::Included(v) if *v < self.remain => *v + 1,
-            core::ops::Bound::Included(v) => panic!(
+            core::ops::Bound::Excluded(&0) => 0,
+            core::ops::Bound::Included(vv) if *vv < self.remain => *vv + 1,
+            #[allow(clippy::panic)]
+            core::ops::Bound::Included(vv) => panic!(
                 "slicing outside of max bound `..={}` where the maximum is {}",
-                *v, self.remain
+                *vv, self.remain
             ),
-            core::ops::Bound::Excluded(v) if *v <= self.remain => *v,
-            core::ops::Bound::Excluded(v) => panic!(
+            core::ops::Bound::Excluded(vv) if *vv <= self.remain => *vv,
+            #[allow(clippy::panic)]
+            core::ops::Bound::Excluded(vv) => panic!(
                 "slicing outside of max bound `..{}` where the maximum is {}",
-                *v, self.remain
+                *vv, self.remain
             ),
             core::ops::Bound::Unbounded => self.remain,
         };
         let start = match range.start_bound() {
-            core::ops::Bound::Included(v) => *v,
-            core::ops::Bound::Excluded(v) => *v + 1,
+            core::ops::Bound::Included(vv) => *vv,
+            core::ops::Bound::Excluded(vv) => *vv + 1,
             core::ops::Bound::Unbounded => 0,
         };
-        if start > max {
-            panic!(
-                "slicing starting outside of maximum bound `{}..` where the maximum is {}",
-                start, self.remain
-            );
-        }
+        assert!(
+            start <= max,
+            "slicing starting outside of maximum bound `{}..` where the maximum is {}",
+            start,
+            self.remain
+        );
         (start, max)
     }
 
     /// Return a slice of the buffer.
-    pub fn slice(&self, range: impl RangeBounds<usize>) -> Self {
+    #[allow(clippy::missing_inline_in_public_items)]
+    #[must_use]
+    pub fn slice<R: RangeBounds<usize>>(&self, range: R) -> Self {
         let (mut start, mut max) = self.check_range(range);
         if max == 0 {
             return Self::new();
         }
         max -= start;
         let mut out = Self::new();
-        for v in self.chunks() {
+        for vv in self.chunks() {
             if max == 0 {
                 return out;
             }
-            let l = v.len();
-            if start >= l {
-                start -= l;
+            let len = vv.len();
+            if start >= len {
+                start -= len;
                 continue;
             }
-            if start != 0 || max < l {
-                let s = v.sliced(start..(max + start).min(l));
-                let b = s.len();
-                out.push_back(s);
-                max -= b;
+            if start != 0 || max < len {
+                let sl = vv.sliced(start..(max + start).min(len));
+                let bb = sl.len();
+                out.push_back(sl);
+                max -= bb;
                 start = 0;
                 continue;
             }
-            out.push_back(v.clone());
-            max -= l;
+            out.push_back(vv.clone());
+            max -= len;
         }
         out
     }
 
     /// Check if the queue starts with a certain byte sequence.
     #[inline]
+    #[must_use]
     pub fn starts_with(&self, data: &[u8]) -> bool {
         if data.len() > self.len() {
             return false;
@@ -209,6 +237,7 @@ impl<'a> ByteQueue<'a> {
 
     /// Check if the queue ends with a certain byte sequence.
     #[inline]
+    #[must_use]
     pub fn ends_with(&self, data: &[u8]) -> bool {
         if data.len() > self.len() {
             return false;
@@ -217,22 +246,23 @@ impl<'a> ByteQueue<'a> {
     }
 
     /// Check if the queue contains a certain byte sequence at a certain index.
+    #[allow(clippy::missing_inline_in_public_items)]
+    #[must_use]
     pub fn exists_at(&self, mut index: usize, mut data: &[u8]) -> bool {
-        for s in self.chunks() {
-            let l = s.len();
-            if index >= l {
-                index -= l;
+        for chunk in self.chunks() {
+            let chunk = chunk.as_slice();
+            let len = chunk.len();
+            if index >= len {
+                index -= len;
                 continue;
             }
-            let s = s.as_slice();
-            let l = s.len();
-            if l - index >= data.len() {
-                return &s[index..index + data.len()] == data;
+            if len - index >= data.len() {
+                return &chunk[index..index + data.len()] == data;
             }
-            if s[index..] != data[..l - index] {
+            if chunk[index..] != data[..len - index] {
                 return false;
             }
-            data = &data[l - index..];
+            data = &data[len - index..];
             index = 0;
         }
         index == 0 && data.is_empty()
@@ -240,21 +270,23 @@ impl<'a> ByteQueue<'a> {
 
     /// Check if the queue contains a certain byte sequence and return its starting position.
     #[inline]
-    pub fn find_byte<F: FnMut(u8) -> bool>(&self, f: F) -> Option<usize> {
-        self.bytes().position(f)
+    pub fn find_byte<F: FnMut(u8) -> bool>(&self, predicate: F) -> Option<usize> {
+        self.bytes().position(predicate)
     }
 
     /// Check if the queue contains a certain byte sequence and return its starting position.
     #[inline]
+    #[must_use]
     pub fn find_slice(&self, data: &[u8]) -> Option<usize> {
         self.find_slice_after(data, 0)
     }
 
     /// Check if the queue contains a certain byte sequence and return its starting position.
     #[inline]
+    #[must_use]
     pub fn find_slice_after(&self, data: &[u8], start: usize) -> Option<usize> {
         self.find_slice_pos(data, 0, start, start)
-            .map(|(a, _, _)| a)
+            .map(|(av, _, _)| av)
     }
 
     /// Check if the queue contains a certain byte sequence and return its starting position.
@@ -286,56 +318,54 @@ impl<'a> ByteQueue<'a> {
 
         'outer: loop {
             let mut chunks = self.chunks().skip(start_chunk);
-            let mut s = match chunks.next() {
-                Some(v) => v,
-                None => return None,
-            };
-            let l = s.len();
-            if start_offset >= l {
-                start_offset -= l;
+            let mut sect = chunks.next()?;
+            let len = sect.len();
+            if start_offset >= len {
+                start_offset -= len;
                 start_chunk += 1;
                 continue;
             }
             let marked_byte = loop {
-                let sl = &s.as_slice()[start_offset..];
-                let Some(a) = sl.iter().position(|x| *x == first_byte) else {
-                    s = match chunks.next() {
-                        Some(v) => v,
+                let sl = &sect.as_slice()[start_offset..];
+                let Some(av) = sl.iter().position(|x| *x == first_byte) else {
+                    sect = match chunks.next() {
+                        Some(vv) => vv,
                         None => return None,
                     };
                     start_offset = 0;
                     start_chunk += 1;
                     continue;
                 };
-                start_offset += a;
-                start_byte += a;
+                start_offset += av;
+                start_byte += av;
                 break start_byte;
             };
             let marked_chunk = start_chunk;
             let marked_offset = start_offset;
             let mut found_in = false;
             let mut skipped_bytes = 0;
-            let mut data = data.iter().skip(1);
-            let mut sl = s.as_slice()[(start_offset + 1)..].iter();
-            while let Some(a) = data.next() {
-                let b = loop {
-                    let Some(b) = sl.next() else {
-                        s = match chunks.next() {
-                            Some(v) => v,
+            let data = data.iter().skip(1);
+            let mut sl = sect.as_slice()[(start_offset + 1)..].iter();
+            for av in data {
+                let bv = loop {
+                    let nxt = sl.next();
+                    let Some(bv) = nxt else {
+                        sect = match chunks.next() {
+                            Some(vv) => vv,
                             None => return None,
                         };
-                        sl = s.as_slice().iter();
+                        sl = sect.as_slice().iter();
                         continue;
                     };
-                    break *b;
+                    break *bv;
                 };
-                if !found_in && b == first_byte {
+                if !found_in && bv == first_byte {
                     found_in = true;
                     start_byte += skipped_bytes;
                     start_offset += skipped_bytes;
                     start_offset -= 1;
                 }
-                if b == *a {
+                if bv == *av {
                     skipped_bytes += 1;
                     continue;
                 }
@@ -350,74 +380,90 @@ impl<'a> ByteQueue<'a> {
     }
 
     /// Split the queue on a certain byte sequence.
+    #[inline]
+    #[must_use]
     pub const fn split_on<'b>(&'b self, needle: &'b [u8]) -> super::SplitOn<'a, 'b> {
         super::SplitOn::new(self, needle, 0)
     }
 
     /// Split the queue on a certain byte sequence.
+    #[inline]
+    #[must_use]
     pub const fn splitn_on<'b>(&'b self, needle: &'b [u8], max: usize) -> super::SplitOn<'a, 'b> {
         super::SplitOn::new(self, needle, max)
     }
 
     /// Iterates over each chunk of bytedata in the queue.
     #[inline]
+    #[must_use]
     pub fn into_iter(self) -> ChunkIter<'a> {
         self.queue.into_iter()
     }
 
     /// Iterates over each byte in the queue.
     #[inline]
+    #[must_use]
     pub fn bytes(&self) -> ByteIter<'a, '_> {
         ByteIter::new(self)
     }
 
     /// Iterates over each byte in the queue.
     #[inline]
-    pub fn into_bytes(self) -> OwnedByteIter<'a> {
+    #[must_use]
+    pub const fn into_bytes(self) -> OwnedByteIter<'a> {
         OwnedByteIter::new(self)
     }
 
-    /// Adds another ByteQueue's chunks to this queue. May be optimized in the future.
+    /// Adds another `ByteQueue`'s chunks to this queue. May be optimized in the future.
     #[inline]
-    pub fn append(&mut self, other: ByteQueue<'a>) {
+    pub fn append(&mut self, other: Self) {
         // TODO: optimize by adding full regions instead of just chunks at to save on region allocations
         self.extend(other.into_iter());
     }
 
     /// Split the queue at a certain index.
     /// This will return the part of the queue after the index `[at, len)` and keep everything before the position in the original queue `[0, at)`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the index is out of bounds.
+    #[inline]
+    #[must_use = "use `drain` if the result is unused"]
     pub fn split_off(&mut self, at: usize) -> Self {
-        let mut out = Self::new();
+        fn inner<'a>(this: &mut ByteQueue<'a>, at: usize) -> ByteQueue<'a> {
+            let mut out = ByteQueue::new();
+            let mut remain = at;
+            while let Some(av) = this.pop_back() {
+                let len = av.len();
+                if len > remain {
+                    let (av, bv) = av.split_at(remain);
+                    this.push_back(av);
+                    out.push_front(bv);
+                    return out;
+                }
+                remain -= len;
+                out.push_front(av);
+                if remain != 0 {
+                    continue;
+                }
+                break;
+            }
+            out
+        }
         if at == 0 {
-            return core::mem::replace(self, out);
+            return core::mem::replace(self, Self::new());
         }
-        if at == self.len() {
-            return out;
+        let len = self.len();
+        if at == len {
+            return Self::new();
         }
-        if at > self.len() {
-            panic!("ByteQueue::split_off: index out of bounds");
-        }
-        let mut remain = at;
-        while let Some(a) = self.pop_back() {
-            let l = a.len();
-            if l > remain {
-                let (a, b) = a.split_at(remain);
-                self.push_back(a);
-                out.push_front(b);
-                return out;
-            }
-            remain -= l;
-            out.push_front(a);
-            if remain != 0 {
-                continue;
-            }
-            break;
-        }
-        out
+        assert!(at <= len, "ByteQueue::split_off: index out of bounds");
+        inner(self, at)
     }
 
     /// Drain a range of bytes from the queue. The returned iterator will remove the bytes from the queue when dropped.
-    pub fn drain(&mut self, range: impl RangeBounds<usize>) -> super::DrainBytes<'a, '_> {
+    #[inline]
+    pub fn drain<R: RangeBounds<usize>>(&mut self, range: R) -> super::DrainBytes<'a, '_> {
         let (start, end) = self.check_range(range);
         super::DrainBytes::new(self, start, end)
     }
@@ -440,7 +486,7 @@ impl<'a> From<&'a [u8]> for ByteQueue<'a> {
 #[cfg(feature = "alloc")]
 #[cfg_attr(docsrs, doc(cfg(feature = "queue")))]
 #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
-impl<'a> From<alloc::vec::Vec<u8>> for ByteQueue<'a> {
+impl From<alloc::vec::Vec<u8>> for ByteQueue<'_> {
     #[inline]
     fn from(data: alloc::vec::Vec<u8>) -> Self {
         Self::with_item(data.into())
@@ -450,7 +496,7 @@ impl<'a> From<alloc::vec::Vec<u8>> for ByteQueue<'a> {
 #[cfg(feature = "alloc")]
 #[cfg_attr(docsrs, doc(cfg(feature = "queue")))]
 #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
-impl<'a> From<alloc::string::String> for ByteQueue<'a> {
+impl From<alloc::string::String> for ByteQueue<'_> {
     #[inline]
     fn from(data: alloc::string::String) -> Self {
         Self::with_item(data.into())
@@ -474,8 +520,8 @@ impl<'a> From<alloc::borrow::Cow<'a, str>> for ByteQueue<'a> {
     #[inline]
     fn from(data: alloc::borrow::Cow<'a, str>) -> Self {
         Self::with_item(match data {
-            alloc::borrow::Cow::Borrowed(v) => ByteData::from_borrowed(v.as_bytes()),
-            alloc::borrow::Cow::Owned(v) => ByteData::from_owned(v.into_bytes()),
+            alloc::borrow::Cow::Borrowed(val) => ByteData::from_borrowed(val.as_bytes()),
+            alloc::borrow::Cow::Owned(val) => ByteData::from_owned(val.into_bytes()),
         })
     }
 }
@@ -484,10 +530,10 @@ impl<'a> From<alloc::borrow::Cow<'a, str>> for ByteQueue<'a> {
 #[cfg_attr(docsrs, doc(cfg(feature = "queue")))]
 #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl<'a> From<ByteQueue<'a>> for ByteData<'a> {
+    #[inline]
     fn from(mut data: ByteQueue<'a>) -> Self {
-        let fst = match data.pop_front() {
-            Some(v) => v,
-            None => return ByteData::empty(),
+        let Some(fst) = data.pop_front() else {
+            return ByteData::empty();
         };
         if data.is_empty() {
             return fst;
@@ -502,6 +548,7 @@ impl<'a> From<ByteQueue<'a>> for ByteData<'a> {
 }
 
 impl<'a> FromIterator<ByteData<'a>> for ByteQueue<'a> {
+    #[inline]
     fn from_iter<T: IntoIterator<Item = ByteData<'a>>>(iter: T) -> Self {
         let mut out = Self::new();
         for i in iter {
@@ -532,6 +579,7 @@ impl<'a: 'b, 'b> IntoIterator for &'b ByteQueue<'a> {
 }
 
 impl<'a> Extend<ByteData<'a>> for ByteQueue<'a> {
+    #[inline]
     fn extend<T: IntoIterator<Item = ByteData<'a>>>(&mut self, iter: T) {
         for i in iter {
             self.push_back(i);
@@ -540,6 +588,7 @@ impl<'a> Extend<ByteData<'a>> for ByteQueue<'a> {
 }
 
 impl<'a> Extend<&'a [u8]> for ByteQueue<'a> {
+    #[inline]
     fn extend<T: IntoIterator<Item = &'a [u8]>>(&mut self, iter: T) {
         for i in iter {
             self.push_back(i);
@@ -550,7 +599,8 @@ impl<'a> Extend<&'a [u8]> for ByteQueue<'a> {
 #[cfg(feature = "alloc")]
 #[cfg_attr(docsrs, doc(cfg(feature = "queue")))]
 #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
-impl<'a> Extend<alloc::vec::Vec<u8>> for ByteQueue<'a> {
+impl Extend<alloc::vec::Vec<u8>> for ByteQueue<'_> {
+    #[inline]
     fn extend<T: IntoIterator<Item = alloc::vec::Vec<u8>>>(&mut self, iter: T) {
         for i in iter {
             self.push_back(i);
@@ -559,6 +609,7 @@ impl<'a> Extend<alloc::vec::Vec<u8>> for ByteQueue<'a> {
 }
 
 impl<'a> Extend<crate::StringData<'a>> for ByteQueue<'a> {
+    #[inline]
     fn extend<T: IntoIterator<Item = crate::StringData<'a>>>(&mut self, iter: T) {
         for i in iter {
             self.queue.push_back(i.into_bytedata());
@@ -567,6 +618,7 @@ impl<'a> Extend<crate::StringData<'a>> for ByteQueue<'a> {
 }
 
 impl<'a> Extend<&'a str> for ByteQueue<'a> {
+    #[inline]
     fn extend<T: IntoIterator<Item = &'a str>>(&mut self, iter: T) {
         for i in iter {
             self.queue.push_back(ByteData::from_borrowed(i.as_bytes()));
@@ -577,7 +629,8 @@ impl<'a> Extend<&'a str> for ByteQueue<'a> {
 #[cfg(feature = "alloc")]
 #[cfg_attr(docsrs, doc(cfg(feature = "queue")))]
 #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
-impl<'a> Extend<alloc::string::String> for ByteQueue<'a> {
+impl Extend<alloc::string::String> for ByteQueue<'_> {
+    #[inline]
     fn extend<T: IntoIterator<Item = alloc::string::String>>(&mut self, iter: T) {
         for i in iter {
             self.queue.push_back(ByteData::from_owned(i.into_bytes()));
@@ -585,33 +638,32 @@ impl<'a> Extend<alloc::string::String> for ByteQueue<'a> {
     }
 }
 
-impl<'a, 'b> PartialEq<ByteQueue<'b>> for ByteQueue<'a> {
+impl<'b> PartialEq<ByteQueue<'b>> for ByteQueue<'_> {
     #[inline]
     fn eq(&self, other: &ByteQueue<'b>) -> bool {
-        let mut ai = self.queue.iter().map(|x| x.as_slice());
-        let mut bi = other.queue.iter().map(|x| x.as_slice());
+        let mut ai = self.queue.iter().map(crate::ByteData::as_slice);
+        let mut bi = other.queue.iter().map(crate::ByteData::as_slice);
         let mut ad = ai.next().unwrap_or_default();
         let mut bd = bi.next().unwrap_or_default();
         loop {
             match (ad, bd) {
                 (b"", b"") => return true,
-                (b"", _) => return false,
-                (_, b"") => return false,
-                (mut a, mut b) => {
-                    let l = a.len().min(b.len());
-                    if a.len() == l {
+                (b"", _) | (_, b"") => return false,
+                (mut av, mut bv) => {
+                    let len = av.len().min(bv.len());
+                    if av.len() == len {
                         ad = ai.next().unwrap_or_default();
                     } else {
-                        ad = &a[l..];
-                        a = &a[..l];
+                        ad = &av[len..];
+                        av = &av[..len];
                     }
-                    if b.len() == l {
+                    if bv.len() == len {
                         bd = bi.next().unwrap_or_default();
                     } else {
-                        bd = &b[l..];
-                        b = &b[..l];
+                        bd = &bv[len..];
+                        bv = &bv[..len];
                     }
-                    if a == b {
+                    if av == bv {
                         continue;
                     }
                     return false;
@@ -624,28 +676,27 @@ impl<'a, 'b> PartialEq<ByteQueue<'b>> for ByteQueue<'a> {
 impl PartialEq<[u8]> for ByteQueue<'_> {
     #[inline]
     fn eq(&self, mut other: &[u8]) -> bool {
-        let mut ai = self.queue.iter().map(|x| x.as_slice());
+        let mut ai = self.queue.iter().map(crate::ByteData::as_slice);
         let mut ad = ai.next().unwrap_or_default();
         loop {
             match (ad, other) {
                 (b"", b"") => return true,
-                (b"", _) => return false,
-                (_, b"") => return false,
-                (mut a, mut b) => {
-                    let l = a.len().min(b.len());
-                    if a.len() == l {
+                (b"", _) | (_, b"") => return false,
+                (mut av, mut bv) => {
+                    let len = av.len().min(bv.len());
+                    if av.len() == len {
                         ad = ai.next().unwrap_or_default();
                     } else {
-                        ad = &a[l..];
-                        a = &a[..l];
+                        ad = &av[len..];
+                        av = &av[..len];
                     }
-                    if b.len() == l {
+                    if bv.len() == len {
                         other = b"";
                     } else {
-                        other = &b[l..];
-                        b = &b[..l];
+                        other = &bv[len..];
+                        bv = &bv[..len];
                     }
-                    if a == b {
+                    if av == bv {
                         continue;
                     }
                     return false;
@@ -743,16 +794,17 @@ impl Eq for ByteQueue<'_> {}
 impl core::hash::Hash for ByteQueue<'_> {
     #[inline]
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
-        for s in self.chunks() {
-            s.as_slice().hash(state);
+        for chunk in self.chunks() {
+            chunk.as_slice().hash(state);
         }
     }
 }
 
-impl<'a> core::cmp::Ord for ByteQueue<'a> {
+impl core::cmp::Ord for ByteQueue<'_> {
+    #[allow(clippy::missing_inline_in_public_items)]
     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
-        let mut ai = self.queue.iter().map(|x| x.as_slice());
-        let mut bi = other.queue.iter().map(|x| x.as_slice());
+        let mut ai = self.queue.iter().map(crate::ByteData::as_slice);
+        let mut bi = other.queue.iter().map(crate::ByteData::as_slice);
         let mut ad = ai.next().unwrap_or_default();
         let mut bd = bi.next().unwrap_or_default();
         loop {
@@ -760,21 +812,22 @@ impl<'a> core::cmp::Ord for ByteQueue<'a> {
                 (b"", b"") => return core::cmp::Ordering::Equal,
                 (b"", _) => return core::cmp::Ordering::Less,
                 (_, b"") => return core::cmp::Ordering::Greater,
-                (mut a, mut b) => {
-                    let l = a.len().min(b.len());
-                    if a.len() == l {
+                (mut av, mut bv) => {
+                    let len = av.len().min(bv.len());
+                    if av.len() == len {
                         ad = ai.next().unwrap_or_default();
                     } else {
-                        ad = &a[l..];
-                        a = &a[..l];
+                        ad = &av[len..];
+                        av = &av[..len];
                     }
-                    if b.len() == l {
+                    if bv.len() == len {
                         bd = bi.next().unwrap_or_default();
                     } else {
-                        bd = &b[l..];
-                        b = &b[..l];
+                        bd = &bv[len..];
+                        bv = &bv[..len];
                     }
-                    match a.cmp(b) {
+                    #[allow(clippy::wildcard_enum_match_arm)]
+                    match av.cmp(bv) {
                         core::cmp::Ordering::Equal => continue,
                         x => return x,
                     }
@@ -787,6 +840,7 @@ impl<'a> core::cmp::Ord for ByteQueue<'a> {
 impl<'a, 'b> PartialOrd<ByteQueue<'b>> for ByteQueue<'a> {
     #[inline]
     fn partial_cmp(&self, other: &ByteQueue<'b>) -> Option<core::cmp::Ordering> {
+        // SAFETY: for the purpose of comparison, the lifetime of the other queue is temporarily extended to the lifetime of the self queue
         let other = unsafe { core::mem::transmute::<&ByteQueue<'b>, &ByteQueue<'a>>(other) };
         Some(self.cmp(other))
     }
@@ -795,30 +849,31 @@ impl<'a, 'b> PartialOrd<ByteQueue<'b>> for ByteQueue<'a> {
 impl PartialOrd<[u8]> for ByteQueue<'_> {
     #[inline]
     fn partial_cmp(&self, mut other: &[u8]) -> Option<core::cmp::Ordering> {
-        let mut ai = self.queue.iter().map(|x| x.as_slice());
+        let mut ai = self.queue.iter().map(crate::ByteData::as_slice);
         let mut ad = ai.next().unwrap_or_default();
         loop {
             match (ad, other) {
                 (b"", b"") => return Some(core::cmp::Ordering::Equal),
                 (b"", _) => return Some(core::cmp::Ordering::Less),
                 (_, b"") => return Some(core::cmp::Ordering::Greater),
-                (mut a, mut b) => {
-                    let l = a.len().min(b.len());
-                    if a.len() == l {
+                (mut av, mut bv) => {
+                    let len = av.len().min(bv.len());
+                    if av.len() == len {
                         ad = ai.next().unwrap_or_default();
                     } else {
-                        ad = &a[l..];
-                        a = &a[..l];
+                        ad = &av[len..];
+                        av = &av[..len];
                     }
-                    if b.len() == l {
+                    if bv.len() == len {
                         other = b"";
                     } else {
-                        other = &b[l..];
-                        b = &b[..l];
+                        other = &bv[len..];
+                        bv = &bv[..len];
                     }
-                    match a.cmp(b) {
+                    #[allow(clippy::wildcard_enum_match_arm)]
+                    match av.cmp(bv) {
                         core::cmp::Ordering::Equal => continue,
-                        x => return Some(x),
+                        xy => return Some(xy),
                     }
                 }
             }
@@ -859,6 +914,7 @@ impl PartialOrd<ByteQueue<'_>> for alloc::vec::Vec<u8> {
 
 impl core::fmt::Debug for ByteQueue<'_> {
     #[inline]
+    #[allow(clippy::min_ident_chars)]
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         let r = crate::MultiByteStringRender::new(self);
         core::fmt::Debug::fmt(&r, f)
@@ -866,6 +922,8 @@ impl core::fmt::Debug for ByteQueue<'_> {
 }
 
 impl core::fmt::LowerHex for ByteQueue<'_> {
+    #[allow(clippy::missing_inline_in_public_items)]
+    #[allow(clippy::min_ident_chars)]
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         if let Some(w) = f.width() {
             if w > self.len() * 2 {
@@ -887,6 +945,8 @@ impl core::fmt::LowerHex for ByteQueue<'_> {
 }
 
 impl core::fmt::UpperHex for ByteQueue<'_> {
+    #[allow(clippy::missing_inline_in_public_items)]
+    #[allow(clippy::min_ident_chars)]
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         if let Some(w) = f.width() {
             if w > self.len() * 2 {
@@ -907,7 +967,7 @@ impl core::fmt::UpperHex for ByteQueue<'_> {
     }
 }
 
-impl<'a> Default for ByteQueue<'a> {
+impl Default for ByteQueue<'_> {
     #[inline]
     fn default() -> Self {
         ByteQueue::new()

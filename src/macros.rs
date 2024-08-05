@@ -5,7 +5,7 @@ macro_rules! concat_bytes_static {
     ($($e:expr),* $(,)*) => {
         {
             const __LEN: usize = 0 $(+ $e.len())*;
-            static __ARR: [u8; __LEN] = $crate::build_const_bytes::<__LEN>([0u8; __LEN], &[$($e),*]).0;
+            static __ARR: [u8; __LEN] = $crate::build_const_bytes::<__LEN>([0_u8; __LEN], &[$($e),*]).0;
             &__ARR
         }
     };
@@ -31,7 +31,12 @@ macro_rules! concat_bytes_static {
 macro_rules! concat_str_static {
     ($($e:expr),* $(,)*) => {
         {
-            static __STR: &str = unsafe { core::str::from_utf8_unchecked($crate::concat_bytes_static!( $($e.as_bytes()),* )) };
+            #[allow(clippy::string_lit_as_bytes)]
+            static __BYT: &[u8] = $crate::concat_bytes_static!( $($e.as_bytes()),* );
+            static __STR: &str = match core::str::from_utf8(__BYT) {
+                Ok(__s) => __s,
+                Err(_) => panic!("concatenated string is not valid UTF-8"),
+            };
             __STR
         }
     };

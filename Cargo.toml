@@ -7,6 +7,8 @@ description = "Representation of a byte slice that is either static, borrowed, o
 license = "MIT OR LGPL-3.0-or-later"
 repository = "https://github.com/TimLuq/bytedata/"
 authors = ["TimLuq"]
+categories = ["network-programming", "data-structures"]
+keywords = ["arc", "buffers", "zero-copy", "io"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

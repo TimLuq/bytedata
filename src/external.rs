@@ -1,9 +1,10 @@
-//! # ExternalBytes
+//! # `ExternalBytes`
 //!
 //! External bytes are byte data that is not owned by the `bytedata` crate.
 //! This can be used to create `ByteData` instances from byte data that is owned by another crate.
 
 /// A structure describing the operations that can be performed on an external byte data type.
+#[allow(missing_debug_implementations)]
 pub struct ExternalOps<T> {
     drop: Option<unsafe fn(*mut T)>,
     as_slice: fn(&T) -> &[u8],
@@ -23,7 +24,7 @@ impl<T: Sized> ExternalOps<T> {
 }
 
 /// A trait for types that can be used as external byte data.
-pub trait ExternalBytes: core::any::Any + Sized + 'static {
+pub trait ExternalBytes: core::any::Any + Sync + Sized + 'static {
     /// The operations that can be performed on this type.
     const OPS: ExternalOps<Self>;
 }
@@ -37,11 +38,11 @@ impl ExternalBytes for alloc::sync::Arc<[u8]> {
 }
 
 impl ExternalBytes for alloc::vec::Vec<u8> {
-    const OPS: ExternalOps<Self> = ExternalOps::new(alloc::vec::Vec::as_slice);
+    const OPS: ExternalOps<Self> = ExternalOps::new(Self::as_slice);
 }
 
 impl ExternalBytes for alloc::string::String {
-    const OPS: ExternalOps<Self> = ExternalOps::new(alloc::string::String::as_bytes);
+    const OPS: ExternalOps<Self> = ExternalOps::new(Self::as_bytes);
 }
 
 impl ExternalBytes for alloc::sync::Arc<str> {
@@ -67,7 +68,9 @@ pub(crate) struct ExtBytesRef {
 }
 
 impl ExtBytesRef {
+    #[inline]
     pub(crate) const fn as_slice(&self) -> &[u8] {
+        // SAFETY: `ptr` is a valid pointer to `u8`.
         unsafe { core::slice::from_raw_parts(self.ptr, self.len) }
     }
 
@@ -83,7 +86,9 @@ pub(crate) struct ExtBytes {
     data: *const ExtBytesRef,
 }
 
+// SAFETY: `ExtBytes` is a transparent wrapper around an owned box to `ExtBytesRef`.
 unsafe impl Send for ExtBytes {}
+// SAFETY: `ExtBytes` is a transparent wrapper around an owned box to `ExtBytesRef`.
 unsafe impl Sync for ExtBytes {}
 
 pub(crate) const KIND_EXT_BYTES: u8 = 0b0000_0011;
@@ -112,39 +117,55 @@ impl ExtBytes {
             offset += align - (offset % align);
         }
 
-        let (data, len, ptr) = unsafe {
-            let layout = alloc::alloc::Layout::from_size_align(alloc, align).unwrap();
-            let data = alloc::alloc::alloc(layout);
+        let (data, len, ptr) = {
+            #[allow(clippy::unwrap_used)]
+            let layout = core::alloc::Layout::from_size_align(alloc, align).unwrap();
+            // SAFETY: `layout` is a valid layout.
+            let data = unsafe { alloc::alloc::alloc(layout) };
             if data.is_null() {
                 alloc::alloc::handle_alloc_error(layout);
             }
 
-            let payload = data.add(offset) as *mut T;
-            payload.write(ext_bytes);
+            // SAFETY: `data` is a valid pointer to an allocated area.
+            let payload = unsafe { data.add(offset).cast::<T>() };
+            // SAFETY: writing to the location we just calculated is safe.
+            unsafe {
+                payload.write(ext_bytes);
+            };
 
-            let sl = as_slice(&*payload);
+            // SAFETY: `payload` is a valid pointer to `T` as we just wrote to it.
+            let sl = as_slice(unsafe { &*payload });
             let len = sl.len();
             let ptr = sl.as_ptr();
 
             if len <= crate::ByteChunk::LEN {
-                let a = crate::ByteData::from_chunk_slice(sl);
+                let aa = crate::ByteData::from_chunk_slice(sl);
                 if let Some(drop) = T::OPS.drop {
-                    drop(payload);
+                    // SAFETY: `payload` is a valid pointer to `T` which should be dropped.
+                    unsafe { drop(payload) };
                 }
-                alloc::alloc::dealloc(data, layout);
-                return a;
+                // SAFETY: `data` is a valid pointer to an allocated area.
+                unsafe { alloc::alloc::dealloc(data, layout) };
+                return aa;
             }
 
-            let header = data as *mut ExtBytesWrapper;
-            header.write(ExtBytesWrapper {
-                drop: core::mem::transmute::<Option<unsafe fn(*mut T)>, Option<unsafe fn(*mut ())>>(
-                    T::OPS.drop,
-                ),
+            #[allow(clippy::cast_ptr_alignment)]
+            let header = data.cast::<ExtBytesWrapper>();
+            let item = ExtBytesWrapper {
+                // SAFETY: `T::OPS.drop` is an optional function pointer.
+                drop: unsafe {
+                    core::mem::transmute::<Option<unsafe fn(*mut T)>, Option<unsafe fn(*mut ())>>(
+                        T::OPS.drop,
+                    )
+                },
                 alloc,
                 ref_count: core::sync::atomic::AtomicU32::new(1),
+                #[allow(clippy::cast_possible_truncation)]
                 align: align as u32,
                 kind: core::any::TypeId::of::<T>(),
-            });
+            };
+            // SAFETY: `header` is a valid pointer to `ExtBytesWrapper`.
+            unsafe { header.write(item) };
 
             (header, len, ptr)
         };
@@ -153,18 +174,22 @@ impl ExtBytes {
             alloc::boxed::Box::into_raw(alloc::boxed::Box::new(ExtBytesRef { data, ptr, len }));
 
         crate::ByteData {
-            external: core::mem::ManuallyDrop::new(ExtBytes {
+            external: core::mem::ManuallyDrop::new(Self {
                 magic: Self::MAGIC,
                 data,
             }),
         }
     }
 
+    #[inline]
     pub(crate) const fn as_slice(&self) -> &[u8] {
+        // SAFETY: `data` is a valid pointer to `ExtBytesRef`.
         unsafe { (*self.data).as_slice() }
     }
 
+    #[inline]
     pub(crate) const fn len(&self) -> usize {
+        // SAFETY: `data` is a valid pointer to `ExtBytesRef`.
         unsafe { (*self.data).len() }
     }
 
@@ -174,29 +199,31 @@ impl ExtBytes {
         &mut self,
         range: R,
     ) {
-        debug_assert_eq!(self.magic[0], KIND_EXT_BYTES);
+        debug_assert_eq!(
+            self.magic[0], KIND_EXT_BYTES,
+            "invalid magic number in ExtBytes"
+        );
         debug_assert!(!self.data.is_null(), "null pointer in ExtBytes");
-        let d = unsafe { &mut *(self.data as *mut ExtBytesRef) };
-        let len = d.len();
+
+        // SAFETY: `data` is a valid pointer to `ExtBytesRef`.
+        let dd = unsafe { &mut *self.data.cast_mut() };
+        let len = dd.len();
         let start = match range.start_bound() {
-            core::ops::Bound::Included(&s) => s,
-            core::ops::Bound::Excluded(&s) => s + 1,
+            core::ops::Bound::Included(&st) => st,
+            core::ops::Bound::Excluded(&st) => st + 1,
             core::ops::Bound::Unbounded => 0,
         };
         let end = match range.end_bound() {
-            core::ops::Bound::Included(&e) => e + 1,
-            core::ops::Bound::Excluded(&e) => e,
+            core::ops::Bound::Included(&end) => end + 1,
+            core::ops::Bound::Excluded(&end) => end,
             core::ops::Bound::Unbounded => len,
         };
-        if end > len || start > len {
-            panic!("index out of bounds");
-        }
-        if end < start {
-            panic!("end < start");
-        }
-        let len = end - start;
-        d.ptr = unsafe { d.ptr.add(start) };
-        d.len = len;
+        assert!(end <= len && start <= len, "index out of bounds");
+        assert!(end >= start, "end < start");
+        let new_len = end - start;
+        // SAFETY: `dd.ptr` is a valid pointer to `u8`.
+        dd.ptr = unsafe { dd.ptr.add(start) };
+        dd.len = new_len;
     }
 
     pub(crate) fn sliced_range<
@@ -206,36 +233,41 @@ impl ExtBytes {
         &self,
         range: R,
     ) -> crate::ByteData<'s> {
-        debug_assert_eq!(self.magic[0], KIND_EXT_BYTES);
+        debug_assert_eq!(
+            self.magic[0], KIND_EXT_BYTES,
+            "invalid magic number in ExtBytes"
+        );
         debug_assert!(!self.data.is_null(), "null pointer in ExtBytes");
-        let d = unsafe { &*self.data };
-        let len = d.len();
+        // SAFETY: `data` is a valid pointer to `ExtBytesRef`.
+        let dd = unsafe { &*self.data };
+        let len = dd.len();
         let start = match range.start_bound() {
-            core::ops::Bound::Included(&s) => s,
-            core::ops::Bound::Excluded(&s) => s + 1,
+            core::ops::Bound::Included(&start) => start,
+            core::ops::Bound::Excluded(&start) => start + 1,
             core::ops::Bound::Unbounded => 0,
         };
         let end = match range.end_bound() {
-            core::ops::Bound::Included(&e) => e + 1,
-            core::ops::Bound::Excluded(&e) => e,
+            core::ops::Bound::Included(&end) => end + 1,
+            core::ops::Bound::Excluded(&end) => end,
             core::ops::Bound::Unbounded => len,
         };
-        if end > len || start > len {
-            panic!("index out of bounds");
-        }
-        if end < start {
-            panic!("end < start");
-        }
-        let len = end - start;
-        if len <= crate::byte_chunk::ByteChunk::LEN {
+        assert!(end <= len && start <= len, "index out of bounds");
+        assert!(end >= start, "end < start");
+        let new_len = end - start;
+        if new_len <= crate::byte_chunk::ByteChunk::LEN {
+            // SAFETY: `dd.ptr` is a valid pointer to `u8`.
+            let ptr = unsafe { dd.ptr.add(start) };
+            // SAFETY: `ptr` is a valid pointer to `u8`.
             return crate::ByteData::from_chunk_slice(unsafe {
-                core::slice::from_raw_parts(d.ptr.add(start), len)
+                core::slice::from_raw_parts(ptr, new_len)
             });
         }
         let ret = self.clone();
-        let d = unsafe { &mut *(ret.data as *mut ExtBytesRef) };
-        d.ptr = unsafe { d.ptr.add(start) };
-        d.len = len;
+        // SAFETY: `ret.data` is a valid pointer to `ExtBytesRef`.
+        let bref = unsafe { &mut *ret.data.cast_mut() };
+        // SAFETY: `bref.ptr` is a valid pointer to `u8`.
+        bref.ptr = unsafe { bref.ptr.add(start) };
+        bref.len = new_len;
         crate::ByteData {
             external: core::mem::ManuallyDrop::new(ret),
         }
@@ -243,79 +275,106 @@ impl ExtBytes {
 
     pub(crate) fn with_inner<T: core::any::Any, R, F: FnOnce(&T, &[u8]) -> R>(
         &self,
-        f: F,
+        fun: F,
     ) -> Option<R> {
-        debug_assert_eq!(self.magic[0], KIND_EXT_BYTES);
+        debug_assert_eq!(
+            self.magic[0], KIND_EXT_BYTES,
+            "invalid magic number in ExtBytes"
+        );
         debug_assert!(!self.data.is_null(), "null pointer in ExtBytes");
-        let d = unsafe { &*self.data };
-        if d.data.is_null() {
+        // SAFETY: `data` is a valid pointer to `ExtBytesRef`.
+        let dd = unsafe { &*self.data };
+        if dd.data.is_null() {
             return None;
         }
-        let e = unsafe { &*d.data };
-        if e.kind != core::any::TypeId::of::<T>() {
+        // SAFETY: `ExtBytesRef.data` is a valid pointer to `ExtBytesWrapper`.
+        let ee = unsafe { &*dd.data };
+        if ee.kind != core::any::TypeId::of::<T>() {
             return None;
         }
         let mut offset = core::mem::size_of::<ExtBytesWrapper>();
-        let align_mod = offset % e.align as usize;
+        let align_mod = offset % ee.align as usize;
         if align_mod != 0 {
-            offset += e.align as usize - align_mod;
+            offset += ee.align as usize - align_mod;
         }
-        let t = unsafe { &*((d.data as *const u8).add(offset) as *const T) };
-        Some(f(t, unsafe { core::slice::from_raw_parts(d.ptr, d.len) }))
+        // SAFETY: `dd.data` is a valid pointer to the container data located at `offset`.
+        let t_val = unsafe { dd.data.cast::<u8>().add(offset) };
+        // SAFETY: `t_val` should now be cast to `*const T`.
+        let t_val = unsafe { &*t_val.cast::<T>() };
+        // SAFETY: `dd.ptr` is a valid pointer to the slice start.
+        Some(fun(t_val, unsafe {
+            core::slice::from_raw_parts(dd.ptr, dd.len)
+        }))
     }
 }
 
 impl Drop for ExtBytes {
     fn drop(&mut self) {
-        debug_assert_eq!(self.magic[0], KIND_EXT_BYTES);
+        debug_assert_eq!(
+            self.magic[0], KIND_EXT_BYTES,
+            "invalid magic number in ExtBytes"
+        );
         debug_assert!(!self.data.is_null(), "null pointer in ExtBytes");
-        unsafe {
-            let ext_ref = &mut *(self.data as *mut ExtBytesRef);
-            debug_assert!(!ext_ref.data.is_null(), "null pointer in ExtBytes");
-            let header = &*(ext_ref.data);
-            let ref_count = header
-                .ref_count
-                .fetch_sub(1, core::sync::atomic::Ordering::Relaxed);
-            if ref_count == 1 {
-                if let Some(drop) = header.drop {
-                    let mut offset = core::mem::size_of::<ExtBytesWrapper>();
-                    let align_mod = offset % header.align as usize;
-                    if align_mod != 0 {
-                        offset += header.align as usize - align_mod;
-                    }
-                    drop((ext_ref.data as *const u8).add(offset) as *mut ());
+
+        // SAFETY: `data` is a valid pointer to a boxed `ExtBytesRef`.
+        let ext_ref = unsafe { &mut *self.data.cast_mut() };
+        debug_assert!(!ext_ref.data.is_null(), "null pointer in ExtBytes");
+        // SAFETY: `ext_ref.data` is a valid pointer to a `ExtBytesWrapper`.
+        let header = unsafe { &*ext_ref.data };
+        let ref_count = header
+            .ref_count
+            .fetch_sub(1, core::sync::atomic::Ordering::Relaxed);
+        if ref_count == 1 {
+            if let Some(drop) = header.drop {
+                let mut offset = core::mem::size_of::<ExtBytesWrapper>();
+                let align_mod = offset % header.align as usize;
+                if align_mod != 0 {
+                    offset += header.align as usize - align_mod;
                 }
-                let layout =
-                    alloc::alloc::Layout::from_size_align(header.alloc, header.align as usize)
-                        .unwrap();
-                alloc::alloc::dealloc(ext_ref.data as *mut u8, layout);
+                // SAFETY: `ext_ref.data` is a valid pointer to the container data located at `offset`.
+                let ptr = unsafe { ext_ref.data.cast::<u8>().add(offset).cast_mut() };
+                // SAFETY: `ptr` is a valid pointer to the data, which should be dropped.
+                unsafe { drop(ptr.cast()) };
             }
-            core::mem::drop(alloc::boxed::Box::from_raw(self.data as *mut ExtBytesRef));
-            self.data = core::ptr::null();
+            #[allow(clippy::unwrap_used)]
+            let layout =
+                core::alloc::Layout::from_size_align(header.alloc, header.align as usize).unwrap();
+            // SAFETY: `ext_ref.data` is a valid pointer to an allocated area.
+            unsafe { alloc::alloc::dealloc(ext_ref.data.cast::<u8>().cast_mut(), layout) };
         }
+        // SAFETY: `ext_ref` is a valid pointer to a boxed `ExtBytesRef`.
+        core::mem::drop(unsafe { alloc::boxed::Box::from_raw(ext_ref) });
+        self.data = core::ptr::null();
     }
 }
 
 impl Clone for ExtBytes {
     fn clone(&self) -> Self {
-        debug_assert_eq!(self.magic[0], KIND_EXT_BYTES);
+        debug_assert_eq!(
+            self.magic[0], KIND_EXT_BYTES,
+            "invalid magic number in ExtBytes"
+        );
         debug_assert!(!self.data.is_null(), "null pointer in ExtBytes");
-        let a = unsafe {
-            let ext_ref = &*self.data;
-            debug_assert!(!ext_ref.data.is_null(), "null pointer in ExtBytes");
-            let header = &*(ext_ref.data);
-            header
-                .ref_count
-                .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
-            alloc::boxed::Box::new(ExtBytesRef {
-                data: ext_ref.data,
-                ptr: ext_ref.ptr,
-                len: ext_ref.len,
-            })
-        };
+
+        // SAFETY: `data` is a valid pointer to a boxed `ExtBytesRef`.
+        let ext_ref = unsafe { &*self.data };
+        debug_assert!(!ext_ref.data.is_null(), "null pointer in ExtBytes");
+
+        // SAFETY: `ext_ref.data` is a valid pointer to a `ExtBytesWrapper`.
+        let header = unsafe { &*(ext_ref.data) };
+        header
+            .ref_count
+            .fetch_add(1, core::sync::atomic::Ordering::Relaxed);
+
+        let ret = alloc::boxed::Box::new(ExtBytesRef {
+            data: ext_ref.data,
+            ptr: ext_ref.ptr,
+            len: ext_ref.len,
+        });
+
         Self {
             magic: Self::MAGIC,
-            data: alloc::boxed::Box::into_raw(a),
+            data: alloc::boxed::Box::into_raw(ret),
         }
     }
 }

@@ -8,27 +8,29 @@ use ::http_body_04 as http_body;
 
 use crate::ByteData;
 
-impl<'a> http_body::Body for ByteData<'a> {
-    type Data = ByteData<'a>;
+impl http_body::Body for ByteData<'_> {
+    type Data = Self;
     type Error = Infallible;
 
+    #[inline]
     fn poll_data(
         mut self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        let slf = core::ops::DerefMut::deref_mut(&mut self);
-        if slf.is_empty() {
+        let this = core::ops::DerefMut::deref_mut(&mut self);
+        if this.is_empty() {
             Poll::Ready(None)
-        } else if slf.len() > 65535 {
-            let res = slf.sliced(0..65535);
-            slf.make_sliced(65535..);
+        } else if this.len() > 0xFFFF {
+            let res = this.sliced(0..0xFFFF);
+            this.make_sliced(0xFFFF..);
             Poll::Ready(Some(Ok(res)))
         } else {
-            let res = core::mem::replace(slf, ByteData::empty());
+            let res = core::mem::replace(this, ByteData::empty());
             Poll::Ready(Some(Ok(res)))
         }
     }
 
+    #[inline]
     fn poll_trailers(
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
@@ -36,10 +38,12 @@ impl<'a> http_body::Body for ByteData<'a> {
         Poll::Ready(Ok(None))
     }
 
+    #[inline]
     fn is_end_stream(&self) -> bool {
         self.is_empty()
     }
 
+    #[inline]
     fn size_hint(&self) -> http_body::SizeHint {
         http_body::SizeHint::with_exact(self.len() as u64)
     }
@@ -47,26 +51,28 @@ impl<'a> http_body::Body for ByteData<'a> {
 
 #[cfg(feature = "alloc")]
 impl http_body::Body for crate::SharedBytes {
-    type Data = crate::SharedBytes;
+    type Data = Self;
     type Error = Infallible;
 
+    #[inline]
     fn poll_data(
         mut self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        let slf = core::ops::DerefMut::deref_mut(&mut self);
-        if slf.is_empty() {
+        let this = core::ops::DerefMut::deref_mut(&mut self);
+        if this.is_empty() {
             Poll::Ready(None)
-        } else if slf.len() > 65535 {
-            let res = slf.sliced(0, 65535);
-            slf.make_sliced(65535, slf.len() - 65535);
+        } else if this.len() > 0xFFFF {
+            let res = this.sliced(0, 0xFFFF);
+            this.make_sliced(0xFFFF, this.len() - 0xFFFF);
             Poll::Ready(Some(Ok(res)))
         } else {
-            let res = core::mem::replace(slf, crate::SharedBytes::empty());
+            let res = core::mem::replace(this, Self::empty());
             Poll::Ready(Some(Ok(res)))
         }
     }
 
+    #[inline]
     fn poll_trailers(
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
@@ -74,10 +80,12 @@ impl http_body::Body for crate::SharedBytes {
         Poll::Ready(Ok(None))
     }
 
+    #[inline]
     fn is_end_stream(&self) -> bool {
         self.is_empty()
     }
 
+    #[inline]
     fn size_hint(&self) -> http_body::SizeHint {
         http_body::SizeHint::with_exact(self.len() as u64)
     }

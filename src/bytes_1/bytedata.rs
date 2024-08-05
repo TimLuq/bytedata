@@ -3,54 +3,58 @@ use ::bytes_1 as bytes;
 use crate::ByteData;
 
 #[cfg_attr(docsrs, doc(cfg(feature = "bytes_1")))]
-impl From<ByteData<'_>> for bytes::Bytes {
-    fn from(dat: ByteData) -> Self {
-        match unsafe { dat.chunk.kind() } {
+impl<'a> From<ByteData<'a>> for bytes::Bytes {
+    #[allow(clippy::missing_inline_in_public_items)]
+    fn from(dat: ByteData<'a>) -> Self {
+        match dat.kind() {
             crate::bytedata::Kind::Slice => {
-                let a = unsafe { &dat.slice };
-                if a.is_empty() {
+                // SAFETY: Slice kind is already checked
+                let aa = unsafe { &dat.slice };
+                if aa.is_empty() {
                     core::mem::forget(dat);
-                    return bytes::Bytes::new();
+                    return Self::new();
                 }
-                if let Some(a) = a.as_static() {
-                    let r = bytes::Bytes::from_static(a);
+                if let Some(aa) = aa.as_static() {
+                    let ret = Self::from_static(aa);
                     core::mem::forget(dat);
-                    return r;
+                    return ret;
                 }
-                let r = bytes::Bytes::copy_from_slice(a.as_slice());
+                let ret = Self::copy_from_slice(aa.as_slice());
                 core::mem::forget(dat);
-                r
+                ret
             }
             crate::bytedata::Kind::Chunk => {
-                let l = unsafe { dat.chunk.data.len };
-                if l == 0 {
+                // SAFETY: Chunk kind is already checked
+                let len = unsafe { dat.chunk.data.len };
+                if len == 0 {
                     core::mem::forget(dat);
-                    return bytes::Bytes::new();
+                    return Self::new();
                 }
-                let r = bytes::Bytes::copy_from_slice(unsafe { dat.chunk.data.as_slice() });
+                // SAFETY: Chunk kind is already checked
+                let ret = Self::copy_from_slice(unsafe { dat.chunk.data.as_slice() });
                 core::mem::forget(dat);
-                r
+                ret
             }
             #[cfg(feature = "alloc")]
             crate::bytedata::Kind::Shared => {
-                let s = unsafe { core::mem::transmute::<ByteData, crate::SharedBytes>(dat) };
-                s.into()
+                // SAFETY: Shared kind is already checked
+                let ret = unsafe { core::mem::transmute::<ByteData<'a>, crate::SharedBytes>(dat) };
+                ret.into()
             }
             #[cfg(feature = "alloc")]
             crate::bytedata::Kind::External => {
-                let s = unsafe { core::mem::transmute::<ByteData, crate::external::ExtBytes>(dat) };
-                let r = s.with_inner(|t: &bytes::Bytes, s: &[u8]| {
+                // SAFETY: External kind is already checked
+                let ext =
+                    unsafe { core::mem::transmute::<ByteData<'a>, crate::external::ExtBytes>(dat) };
+                let ret = ext.with_inner(|tval: &Self, extb: &[u8]| {
                     let start = {
-                        let sp: *const u8 = s.as_ptr();
-                        let tp: *const u8 = t.as_ptr();
+                        let sp: *const u8 = extb.as_ptr();
+                        let tp: *const u8 = tval.as_ptr();
                         sp as usize - tp as usize
                     };
-                    t.slice(start..(start + s.len()))
+                    tval.slice(start..(start + extb.len()))
                 });
-                match r {
-                    Some(r) => r,
-                    None => bytes::Bytes::copy_from_slice(s.as_slice()),
-                }
+                ret.unwrap_or_else(|| Self::copy_from_slice(ext.as_slice()))
             }
         }
     }
@@ -77,6 +81,7 @@ impl From<bytes::Bytes> for ByteData<'_> {
 #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 #[cfg_attr(docsrs, doc(cfg(feature = "bytes_1")))]
 impl From<bytes::Bytes> for ByteData<'_> {
+    #[inline]
     fn from(dat: bytes::Bytes) -> Self {
         Self::from_shared(dat.into())
     }
@@ -94,10 +99,9 @@ impl bytes::Buf for ByteData<'_> {
         self.as_slice()
     }
 
+    #[inline]
     fn advance(&mut self, cnt: usize) {
-        if cnt > self.len() {
-            panic!("ByteData::advance: index out of bounds");
-        }
+        assert!(cnt <= self.len(), "ByteData::advance: index out of bounds");
         self.make_sliced(cnt..);
     }
 
@@ -106,11 +110,13 @@ impl bytes::Buf for ByteData<'_> {
         !self.is_empty()
     }
 
+    #[inline]
     fn copy_to_bytes(&mut self, len: usize) -> bytes::Bytes {
         let currlen = self.len();
-        if len > currlen {
-            panic!("ByteData::copy_to_bytes: index out of bounds");
-        }
+        assert!(
+            len <= currlen,
+            "ByteData::copy_to_bytes: index out of bounds"
+        );
         if len == 0 {
             return bytes::Bytes::new();
         }

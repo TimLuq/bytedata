@@ -10,9 +10,11 @@ pub(super) struct LinkedRoot<'a> {
 }
 
 #[cfg(feature = "alloc")]
+// SAFETY: `LinkedRoot` is `Send` and `Sync` because the pointers points to heap allocated memory
 unsafe impl Send for LinkedRoot<'_> {}
 
 #[cfg(feature = "alloc")]
+// SAFETY: `LinkedRoot` is `Send` and `Sync` because the pointers points to heap allocated memory
 unsafe impl Sync for LinkedRoot<'_> {}
 
 #[cfg(not(feature = "alloc"))]
@@ -108,21 +110,25 @@ impl<'a> LinkedRoot<'a> {
 
     #[inline]
     fn first(&self) -> Option<&super::linked_node_data::LinkedNodeData<'a>> {
+        // SAFETY: if the pointer is non-null it points to a valid `LinkedNodeLeaf`.
         unsafe { self.first.as_ref().map(|x| &x.data) }
     }
 
     #[inline]
     fn first_mut(&mut self) -> Option<&mut super::linked_node_data::LinkedNodeData<'a>> {
+        // SAFETY: if the pointer is non-null it points to a valid `LinkedNodeLeaf`.
         unsafe { self.first.as_mut().map(|x| &mut x.data) }
     }
 
     #[inline]
     fn last(&self) -> Option<&super::linked_node_data::LinkedNodeData<'a>> {
+        // SAFETY: if the pointer is non-null it points to a valid `LinkedNodeLeaf`.
         unsafe { self.first.as_ref().map(|x| &x.data) }
     }
 
     #[inline]
     fn last_mut(&mut self) -> Option<&mut super::linked_node_data::LinkedNodeData<'a>> {
+        // SAFETY: if the pointer is non-null it points to a valid `LinkedNodeLeaf`.
         unsafe { self.first.as_mut().map(|x| &mut x.data) }
     }
 
@@ -130,8 +136,10 @@ impl<'a> LinkedRoot<'a> {
         let node = alloc::boxed::Box::new(super::linked_node_leaf::LinkedNodeLeaf::with_item(data));
         let node = alloc::boxed::Box::into_raw(node);
         self.count += 1;
+        // SAFETY: if the pointer is non-null it points to a valid `LinkedNodeLeaf`.
         if let Some(last) = unsafe { self.last.as_mut() } {
             last.next = node;
+            // SAFETY: the pointer is a valid and non-null pointer to a boxed `LinkedNodeLeaf`.
             unsafe { &mut *node }.prev = last;
             self.last = node;
             return;
@@ -144,8 +152,10 @@ impl<'a> LinkedRoot<'a> {
         let node = alloc::boxed::Box::new(super::linked_node_leaf::LinkedNodeLeaf::with_item(data));
         let node = alloc::boxed::Box::into_raw(node);
         self.count += 1;
+        // SAFETY: if the pointer is non-null it points to a valid `LinkedNodeLeaf`.
         if let Some(first) = unsafe { self.first.as_mut() } {
             first.prev = node;
+            // SAFETY: the pointer is a valid and non-null pointer to a boxed `LinkedNodeLeaf`.
             unsafe { &mut *node }.next = first;
             self.first = node;
             return;
@@ -159,17 +169,22 @@ impl<'a> LinkedRoot<'a> {
             self.count = 0;
             return Some(core::mem::replace(&mut self.chamber, ByteData::empty()));
         }
+        // SAFETY: if the pointer is non-null it points to a valid `LinkedNodeLeaf`.
         let last = unsafe { self.last.as_mut()? };
-        let r = last.data.pop_back()?;
+        let ret = last.data.pop_back()?;
         self.count -= 1;
+
+        // dealloc the node if it is empty and there exists a previous node
         if last.data.len == 0 {
+            // SAFETY: if the pointer is non-null it points to a valid `LinkedNodeLeaf`.
             if let Some(prev) = unsafe { last.prev.as_mut() } {
                 prev.next = core::ptr::null_mut();
                 self.last = prev;
+                // SAFETY: the pointer is a valid and non-null pointer to a boxed `LinkedNodeLeaf`.
                 core::mem::drop(unsafe { alloc::boxed::Box::from_raw(last) });
             }
         }
-        Some(r)
+        Some(ret)
     }
 
     pub(super) fn pop_front(&mut self) -> Option<ByteData<'a>> {
@@ -180,16 +195,23 @@ impl<'a> LinkedRoot<'a> {
             self.count -= 1;
             return Some(core::mem::replace(&mut self.chamber, ByteData::empty()));
         }
+        // SAFETY: if the pointer is non-null it points to a valid `LinkedNodeLeaf`.
         let first = unsafe { self.first.as_mut()? };
-        let r = first.data.pop_front();
+        let ret = first.data.pop_front()?;
+        self.count -= 1;
+
+        // dealloc the node if it is empty and there exists a next node
         if first.data.len == 0 {
+            // SAFETY: if the pointer is non-null it points to a valid `LinkedNodeLeaf`.
             if let Some(next) = unsafe { first.next.as_mut() } {
                 next.prev = core::ptr::null_mut();
                 self.first = next;
+                // SAFETY: the pointer is a valid and non-null pointer to a boxed `LinkedNodeLeaf`.
                 core::mem::drop(unsafe { alloc::boxed::Box::from_raw(first) });
             }
         }
-        r
+
+        Some(ret)
     }
 
     #[inline]
@@ -205,8 +227,8 @@ impl<'a> LinkedRoot<'a> {
 
     #[inline]
     pub(super) fn back(&self) -> Option<&ByteData<'a>> {
-        if let Some(a) = self.last().and_then(|x| x.back()) {
-            return Some(a);
+        if let Some(aa) = self.last().and_then(|x| x.back()) {
+            return Some(aa);
         }
         if !self.chamber.is_empty() {
             return Some(&self.chamber);
@@ -221,6 +243,7 @@ impl<'a> LinkedRoot<'a> {
         } else {
             Some(&self.chamber)
         };
+        // SAFETY: if the pointer is non-null it points to a valid `LinkedNodeLeaf`.
         LinkedIter::new(chamber, unsafe { self.first.as_ref() })
     }
 }
@@ -243,10 +266,10 @@ impl<'a> LinkedRoot<'a> {
                     #[cfg(feature = "alloc")]
                     {
                         self.count += 1;
-                    }
+                    };
                     return;
                 }
-                Err(v) => v,
+                Err(val) => val,
             };
         }
         #[cfg(not(feature = "alloc"))]
@@ -254,7 +277,7 @@ impl<'a> LinkedRoot<'a> {
             "ByteQueue::push_back: out of space, use `alloc` feature to enable dynamic allocation"
         );
         #[cfg(feature = "alloc")]
-        self.push_back_alloc(data)
+        self.push_back_alloc(data);
     }
 
     pub(super) fn push_front(&mut self, mut data: ByteData<'a>) {
@@ -266,7 +289,9 @@ impl<'a> LinkedRoot<'a> {
             self.chamber = data;
             self.count = 1;
             return;
-        } else {
+        }
+        #[cfg(feature = "alloc")]
+        {
             core::mem::swap(&mut self.chamber, &mut data);
             if data.is_empty() {
                 self.count += 1;
@@ -280,10 +305,10 @@ impl<'a> LinkedRoot<'a> {
                     #[cfg(feature = "alloc")]
                     {
                         self.count += 1;
-                    }
+                    };
                     return;
                 }
-                Err(v) => v,
+                Err(val) => val,
             };
         }
         #[cfg(not(feature = "alloc"))]
@@ -291,14 +316,14 @@ impl<'a> LinkedRoot<'a> {
             "ByteQueue::push_front: out of space, use `alloc` feature to enable dynamic allocation"
         );
         #[cfg(feature = "alloc")]
-        self.push_front_alloc(data)
+        self.push_front_alloc(data);
     }
 
     #[inline]
     fn from_iter<I: Iterator<Item = ByteData<'a>>>(iter: I) -> Self {
-        let mut s = Self::new();
-        s.extend(iter);
-        s
+        let mut root = Self::new();
+        root.extend(iter);
+        root
     }
 
     fn extend<I: Iterator<Item = ByteData<'a>>>(&mut self, iter: I) {
@@ -308,18 +333,20 @@ impl<'a> LinkedRoot<'a> {
     }
 
     #[inline]
-    pub(super) fn into_iter(self) -> ChunkIter<'a> {
+    pub(super) const fn into_iter(self) -> ChunkIter<'a> {
         ChunkIter::new(self)
     }
 }
 
 impl Clone for LinkedRoot<'_> {
+    #[inline]
     fn clone(&self) -> Self {
         Self::from_iter(self.iter().cloned())
     }
 }
 
 impl Default for LinkedRoot<'_> {
+    #[inline]
     fn default() -> Self {
         Self::new()
     }
@@ -329,7 +356,9 @@ impl Drop for LinkedRoot<'_> {
     #[cfg(feature = "alloc")]
     fn drop(&mut self) {
         let mut node = self.first;
+        // SAFETY: if the pointer is non-null, it is a valid pointer to a `LinkedNodeLeaf`.
         while let Some(n) = unsafe { node.as_mut() } {
+            // SAFETY: the pointer is a valid and non-null pointer to a boxed `LinkedNodeLeaf`.
             let n = unsafe { alloc::boxed::Box::from_raw(n) };
             node = n.next;
             core::mem::drop(n);
@@ -338,6 +367,7 @@ impl Drop for LinkedRoot<'_> {
 
     #[cfg(not(feature = "alloc"))]
     fn drop(&mut self) {
+        // SAFETY: it is safe to drop the inner data
         unsafe { core::ptr::drop_in_place(&mut self.data) };
         self.data.len = 0;
     }

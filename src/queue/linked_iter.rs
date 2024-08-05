@@ -1,7 +1,8 @@
 use core::mem::MaybeUninit;
 
 /// An iterator over byte chunks.
-pub struct LinkedIter<'a: 'b, 'b> {
+#[allow(missing_debug_implementations)]
+pub struct LinkedIter<'a, 'b> {
     #[cfg(feature = "alloc")]
     chamber: Option<&'b crate::ByteData<'a>>,
     #[cfg(feature = "alloc")]
@@ -26,17 +27,17 @@ impl<'a: 'b, 'b> LinkedIter<'a, 'b> {
     }
 
     fn item_len(&self) -> usize {
-        let mut node = match self.node {
-            Some(v) => v,
-            None => return self.chamber.is_some() as usize,
+        let Some(mut node) = self.node else {
+            return usize::from(self.chamber.is_some());
         };
         let data = &node.data;
 
         let len = data.len as usize - self.offset;
         let mut len = len;
-        while let Some(a) = unsafe { node.next.as_ref() } {
-            len += a.data.len as usize;
-            node = a;
+        // SAFETY: the pointer is either null or points to a valid node
+        while let Some(aa) = unsafe { node.next.as_ref() } {
+            len += aa.data.len as usize;
+            node = aa;
             continue;
         }
         if self.chamber.is_some() {
@@ -59,9 +60,11 @@ impl<'a: 'b, 'b> LinkedIter<'a, 'b> {
     }
 }
 
+#[allow(single_use_lifetimes)]
 impl<'a: 'b, 'b> LinkedIter<'a, 'b> {
     /// Skips the next `n` items.
     #[inline]
+    #[must_use]
     pub fn skip(mut self, n: usize) -> Self {
         if n != 0 {
             self.skip_mut(n);
@@ -70,41 +73,48 @@ impl<'a: 'b, 'b> LinkedIter<'a, 'b> {
     }
 
     /// Skips the next `n` items.
-    pub fn skip_mut(&mut self, mut n: usize) -> &mut Self {
+    #[inline]
+    pub fn skip_mut(&mut self, n: usize) -> &mut Self {
+        #[allow(single_use_lifetimes)]
+        fn skip_mut_inner<'a: 'b, 'b>(this: &mut LinkedIter<'a, 'b>, mut n: usize) {
+            #[cfg(feature = "alloc")]
+            if this.chamber.take().is_some() {
+                n -= 1;
+            }
+            while n != 0 {
+                #[cfg(feature = "alloc")]
+                let Some(node) = this.node
+                else {
+                    return;
+                };
+                #[cfg(feature = "alloc")]
+                let data = &node.data;
+                #[cfg(not(feature = "alloc"))]
+                let data = this.data;
+
+                #[cfg(not(feature = "alloc"))]
+                if this.offset == data.len as usize {
+                    return;
+                }
+
+                #[cfg(feature = "alloc")]
+                if this.offset == data.len as usize {
+                    // SAFETY: the pointer is either null or points to a valid node
+                    this.node = unsafe { node.next.as_ref() };
+                    this.offset = 0;
+                    continue;
+                }
+
+                let skip = core::cmp::min(n, data.len as usize - this.offset);
+                this.offset += skip;
+                n -= skip;
+            }
+        }
+
         if n == 0 {
             return self;
         }
-        #[cfg(feature = "alloc")]
-        if self.chamber.take().is_some() {
-            n -= 1;
-        }
-        while n != 0 {
-            #[cfg(feature = "alloc")]
-            let Some(node) = self.node
-            else {
-                return self;
-            };
-            #[cfg(feature = "alloc")]
-            let data = &node.data;
-            #[cfg(not(feature = "alloc"))]
-            let data = self.data;
-
-            #[cfg(not(feature = "alloc"))]
-            if self.offset == data.len as usize {
-                return self;
-            }
-
-            #[cfg(feature = "alloc")]
-            if self.offset == data.len as usize {
-                self.node = unsafe { node.next.as_ref() };
-                self.offset = 0;
-                continue;
-            }
-
-            let skip = core::cmp::min(n, data.len as usize - self.offset);
-            self.offset += skip;
-            n -= skip;
-        }
+        skip_mut_inner(self, n);
         self
     }
 }
@@ -112,34 +122,42 @@ impl<'a: 'b, 'b> LinkedIter<'a, 'b> {
 impl<'a: 'b, 'b> Iterator for LinkedIter<'a, 'b> {
     type Item = &'b crate::ByteData<'a>;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        #[cfg(feature = "alloc")]
-        if let Some(v) = self.chamber.take() {
-            return Some(v);
-        }
-        #[cfg(feature = "alloc")]
-        let node = self.node?;
-        #[cfg(feature = "alloc")]
-        let data = &node.data;
-        #[cfg(not(feature = "alloc"))]
-        let data = self.data;
+        fn inner<'a: 'b, 'b>(this: &mut LinkedIter<'a, 'b>) -> Option<&'b crate::ByteData<'a>> {
+            #[cfg(feature = "alloc")]
+            let node = this.node?;
+            #[cfg(feature = "alloc")]
+            let data = &node.data;
+            #[cfg(not(feature = "alloc"))]
+            let data = this.data;
 
-        if self.offset < data.len as usize {
-            let r: &MaybeUninit<crate::ByteData<'a>> =
-                &data.data[(data.beg as usize + self.offset) % data.data.len()];
-            self.offset += 1;
-            return Some(unsafe { r.assume_init_ref() });
-        }
+            if this.offset < data.len as usize {
+                let ret: &MaybeUninit<crate::ByteData<'a>> =
+                    &data.data[(data.beg as usize + this.offset) % data.data.len()];
+                this.offset += 1;
+                // SAFETY: the beg and len indicate a valid slot
+                return Some(unsafe { ret.assume_init_ref() });
+            }
 
-        #[cfg(not(feature = "alloc"))]
-        return None;
+            #[cfg(not(feature = "alloc"))]
+            return None;
+
+            #[cfg(feature = "alloc")]
+            {
+                // SAFETY: the pointer is either null or points to a valid node
+                this.node = unsafe { node.next.as_ref() };
+                this.offset = 0;
+                this.next()
+            }
+        }
 
         #[cfg(feature = "alloc")]
-        {
-            self.node = unsafe { node.next.as_ref() };
-            self.offset = 0;
-            self.next()
+        if let Some(val) = self.chamber.take() {
+            return Some(val);
         }
+
+        inner(self)
     }
 
     #[inline]
@@ -172,17 +190,21 @@ impl<'a: 'b, 'b> Iterator for LinkedIter<'a, 'b> {
     }
 }
 
+#[allow(single_use_lifetimes)]
 impl<'a: 'b, 'b> ExactSizeIterator for LinkedIter<'a, 'b> {
+    #[inline]
     fn len(&self) -> usize {
         self.item_len()
     }
 }
 
+#[allow(single_use_lifetimes)]
 impl<'a: 'b, 'b> core::iter::FusedIterator for LinkedIter<'a, 'b> {}
 
 /// An iterator over string chunks.
 #[repr(transparent)]
-pub struct LinkedStrIter<'a: 'b, 'b> {
+#[allow(missing_debug_implementations)]
+pub struct LinkedStrIter<'a, 'b> {
     inner: LinkedIter<'a, 'b>,
 }
 
@@ -196,10 +218,14 @@ impl<'a: 'b, 'b> LinkedStrIter<'a, 'b> {
 impl<'a: 'b, 'b> Iterator for LinkedStrIter<'a, 'b> {
     type Item = &'b crate::StringData<'a>;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         self.inner
             .next()
-            .map(|v| unsafe { &*(v as *const crate::ByteData<'a> as *const crate::StringData<'a>) })
+            // SAFETY: The inner iterator returns chunks of `ByteData` which are valid UTF-8.
+            .map(|val| unsafe {
+                &*(val as *const crate::ByteData<'a>).cast::<crate::StringData<'a>>()
+            })
     }
 
     #[inline]
@@ -232,10 +258,13 @@ impl<'a: 'b, 'b> Iterator for LinkedStrIter<'a, 'b> {
     }
 }
 
+#[allow(single_use_lifetimes)]
 impl<'a: 'b, 'b> ExactSizeIterator for LinkedStrIter<'a, 'b> {
+    #[inline]
     fn len(&self) -> usize {
         self.inner.item_len()
     }
 }
 
+#[allow(single_use_lifetimes)]
 impl<'a: 'b, 'b> core::iter::FusedIterator for LinkedStrIter<'a, 'b> {}

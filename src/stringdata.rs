@@ -23,6 +23,7 @@ pub struct StringData<'a> {
 impl<'a> StringData<'a> {
     /// Returns an empty `StringData`.
     #[inline]
+    #[must_use]
     pub const fn empty() -> Self {
         StringData {
             data: ByteData::empty(),
@@ -31,6 +32,7 @@ impl<'a> StringData<'a> {
 
     /// Creates a `StringData` from a slice of bytes.
     #[inline]
+    #[must_use]
     pub const fn from_static(dat: &'static str) -> Self {
         StringData {
             data: ByteData::from_static(dat.as_bytes()),
@@ -39,6 +41,7 @@ impl<'a> StringData<'a> {
 
     /// Creates a `StringData` from a borrowed slice of bytes.
     #[inline]
+    #[must_use]
     pub const fn from_borrowed(dat: &'a str) -> Self {
         StringData {
             data: ByteData::from_borrowed(dat.as_bytes()),
@@ -47,6 +50,11 @@ impl<'a> StringData<'a> {
 
     #[cfg(feature = "alloc")]
     /// Creates a `StringData` from a `SharedBytes`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the input if the data is not valid UTF-8.
+    #[inline]
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     pub const fn try_from_shared(dat: SharedBytes) -> Result<Self, SharedBytes> {
         if core::str::from_utf8(dat.as_slice()).is_err() {
@@ -58,7 +66,12 @@ impl<'a> StringData<'a> {
     }
 
     /// Creates a `StringData` from `ByteData`.
-    pub const fn try_from_bytedata(dat: ByteData<'a>) -> Result<Self, ByteData> {
+    ///
+    /// # Errors
+    ///
+    /// Returns the input if the data is not valid UTF-8.
+    #[inline]
+    pub const fn try_from_bytedata(dat: ByteData<'a>) -> Result<Self, ByteData<'a>> {
         if core::str::from_utf8(dat.as_slice()).is_err() {
             return Err(dat);
         }
@@ -73,18 +86,22 @@ impl<'a> StringData<'a> {
     /// Otherwise, the behavior is undefined for any context using the value.
     /// Prefer [`StringData::try_from_bytedata`] if you are unsure.
     #[inline]
+    #[must_use]
     pub const unsafe fn from_bytedata_unchecked(dat: ByteData<'a>) -> Self {
         StringData { data: dat }
     }
 
     /// Returns the underlying [`ByteData`].
     #[inline]
+    #[must_use]
     pub const fn into_bytedata(self) -> ByteData<'a> {
+        // SAFETY: `StringData` is a transparent wrapper around `ByteData`.
         unsafe { core::mem::transmute(self) }
     }
 
     /// Returns a reference to the underlying [`ByteData`].
     #[inline]
+    #[must_use]
     pub const fn as_bytedata(&self) -> &ByteData<'a> {
         &self.data
     }
@@ -92,6 +109,8 @@ impl<'a> StringData<'a> {
     #[cfg(feature = "alloc")]
     /// Creates a `StringData` from a `String`.
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    #[must_use]
+    #[inline]
     pub fn from_owned(dat: String) -> Self {
         StringData { data: dat.into() }
     }
@@ -99,102 +118,124 @@ impl<'a> StringData<'a> {
     #[cfg(feature = "alloc")]
     /// Creates a `StringData` from a `Cow<'_, str>`.
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    #[must_use]
+    #[inline]
     pub fn from_cow(dat: Cow<'a, str>) -> Self {
         match dat {
-            Cow::Borrowed(b) => Self::from_borrowed(b),
-            Cow::Owned(o) => Self::from_owned(o),
+            Cow::Borrowed(borr) => Self::from_borrowed(borr),
+            Cow::Owned(ow) => Self::from_owned(ow),
         }
     }
 
     #[cfg(feature = "alloc")]
     /// Creates a `StringData` from a `Cow<'static, str>`.
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    #[must_use]
+    #[inline]
     pub fn from_cow_static(dat: Cow<'static, str>) -> Self {
         match dat {
-            Cow::Borrowed(b) => Self::from_static(b),
-            Cow::Owned(o) => Self::from_owned(o),
+            Cow::Borrowed(borr) => Self::from_static(borr),
+            Cow::Owned(ow) => Self::from_owned(ow),
         }
     }
 
     /// Returns the underlying byte slice.
     #[inline]
+    #[must_use]
     pub const fn as_bytes(&self) -> &[u8] {
         self.data.as_slice()
     }
 
     /// Returns the underlying `str`.
     #[inline]
+    #[must_use]
     pub const fn as_str(&self) -> &str {
+        // SAFETY: `StringData` is guaranteed to be valid UTF-8, unless the user has used `unsafe` methods.
         unsafe { core::str::from_utf8_unchecked(self.data.as_slice()) }
     }
 
     /// Returns the length of the underlying byte slice.
     #[inline]
+    #[must_use]
     pub const fn len(&self) -> usize {
         self.data.len()
     }
 
     /// Returns `true` if the underlying byte slice is empty.
     #[inline]
+    #[must_use]
     pub const fn is_empty(&self) -> bool {
         self.data.is_empty()
     }
 
     /// Check if the underlying byte slice is equal to another. This can be used in a `const` context.
     #[inline]
+    #[must_use]
     pub const fn eq_const(&self, other: &StringData<'_>) -> bool {
         crate::const_eq(self.as_bytes(), other.as_bytes())
     }
 
     /// Check if the underlying byte slice is equal to another. This can be used in a `const` context.
     #[inline]
+    #[must_use]
     pub const fn eq_slice(&self, other: &[u8]) -> bool {
         crate::const_eq(self.as_bytes(), other)
     }
 
     /// Check if the underlying byte slice is equal to another. This can be used in a `const` context.
     #[inline]
+    #[must_use]
     pub const fn eq_str(&self, other: &str) -> bool {
         crate::const_eq(self.as_bytes(), other.as_bytes())
     }
 
     /// Check if the ending of a `StringData` matches the given str.
+    #[inline]
+    #[must_use]
     pub const fn ends_with(&self, needle: &str) -> bool {
         crate::const_ends_with(self.as_bytes(), needle.as_bytes())
     }
 
     /// Check if the beginning of a `StringData` matches the given str.
+    #[inline]
+    #[must_use]
     pub const fn starts_with(&self, needle: &str) -> bool {
         crate::const_starts_with(self.as_bytes(), needle.as_bytes())
     }
 
     /// Trim whitespace from the beginning and end of the `StringData`.
-    pub fn trim(&self) -> StringData<'a> {
-        let a = self.as_str().trim();
-        let start = a.as_ptr() as usize - self.as_str().as_ptr() as usize;
-        let end = start + a.len();
+    #[inline]
+    #[must_use]
+    pub fn trim(&self) -> Self {
+        let at = self.as_str().trim();
+        let start = at.as_ptr() as usize - self.as_str().as_ptr() as usize;
+        let end = start + at.len();
         self.sliced(start..end)
     }
 
     /// Trim whitespace from the beginning of the `StringData`.
-    pub fn trim_start(&self) -> StringData<'a> {
-        let a = self.as_str().trim_start();
-        let start = a.as_ptr() as usize - self.as_str().as_ptr() as usize;
-        let end = start + a.len();
+    #[inline]
+    #[must_use]
+    pub fn trim_start(&self) -> Self {
+        let at = self.as_str().trim_start();
+        let start = at.as_ptr() as usize - self.as_str().as_ptr() as usize;
+        let end = start + at.len();
         self.sliced(start..end)
     }
 
     /// Trim whitespace from the end of the `StringData`.
-    pub fn trim_end(&self) -> StringData<'a> {
-        let a = self.as_str().trim_end();
-        self.sliced(0..a.len())
+    #[inline]
+    #[must_use]
+    pub fn trim_end(&self) -> Self {
+        let at = self.as_str().trim_end();
+        self.sliced(0..at.len())
     }
 
     fn check_sliced<R: RangeBounds<usize> + SliceIndex<str, Output = str>>(
         &self,
         range: R,
     ) -> core::ops::Range<usize> {
-        let b = self.data.as_slice();
+        let by = self.data.as_slice();
         let start = match range.start_bound() {
             Bound::Included(start) => *start,
             Bound::Excluded(start) => *start + 1,
@@ -205,26 +246,29 @@ impl<'a> StringData<'a> {
             Bound::Excluded(end) => *end,
             Bound::Unbounded => self.len(),
         };
-        if end < start {
-            panic!("StringData::sliced: end < start");
-        }
-        if start > b.len() {
-            panic!("StringData::sliced: start > bytes.len()");
-        }
-        if end > b.len() {
-            panic!("StringData::sliced: end > bytes.len()");
-        }
-        if end < b.len() && b[end] & 0b1100_0000 == 0b1000_0000 {
-            panic!("StringData::sliced: end is not a char boundary");
-        }
-        if start != 0 && (start == end || b[start] & 0b1100_0000 == 0b1000_0000) {
-            panic!("StringData::sliced: start is not a char boundary");
-        }
+        assert!(end >= start, "StringData::check_sliced: end < start");
+        assert!(
+            start <= by.len(),
+            "StringData::check_sliced: start > bytes.len()"
+        );
+        assert!(
+            end <= by.len(),
+            "StringData::check_sliced: end > bytes.len()"
+        );
+        assert!(
+            end == by.len() || by[end] & 0b1100_0000 != 0b1000_0000,
+            "StringData::check_sliced: end is not a char boundary"
+        );
+        assert!(
+            start == 0 || start == end || by[start] & 0b1100_0000 != 0b1000_0000,
+            "StringData::check_sliced: start is not a char boundary"
+        );
         start..end
     }
 
     /// Returns a `ByteData` with the given range of bytes.
     #[inline]
+    #[must_use]
     pub fn sliced<R: RangeBounds<usize> + SliceIndex<str, Output = str>>(&self, range: R) -> Self {
         let range = self.check_sliced(range);
         let data = self.data.sliced(range);
@@ -233,6 +277,7 @@ impl<'a> StringData<'a> {
 
     /// Transform the range of bytes this `ByteData` represents.
     #[inline]
+    #[must_use]
     pub fn into_sliced<R: RangeBounds<usize> + SliceIndex<str, Output = str>>(
         mut self,
         range: R,
@@ -254,47 +299,51 @@ impl<'a> StringData<'a> {
 
     /// Consume the `StringData` until the char condition is triggered.
     #[inline]
-    pub fn take_while<F: FnMut(char) -> bool>(&mut self, mut f: F) -> StringData<'a> {
-        let Some(position) = self.as_str().find(|c| !f(c)) else {
+    #[must_use]
+    pub fn take_while<F: FnMut(char) -> bool>(&mut self, mut fun: F) -> Self {
+        let Some(position) = self.as_str().find(|ch| !fun(ch)) else {
             return core::mem::replace(self, StringData::empty());
         };
         if position == 0 {
             return StringData::empty();
         }
-        let a = self.sliced(0..position);
+        let av = self.sliced(0..position);
         self.make_sliced(position..);
-        a
+        av
     }
 
     /// Split the `StringData` at the given position.
     #[inline]
-    pub fn split_at(mut self, position: usize) -> (StringData<'a>, StringData<'a>) {
-        let a = self.sliced(0..position);
+    #[must_use]
+    pub fn split_at(mut self, position: usize) -> (Self, Self) {
+        let av = self.sliced(0..position);
         self.make_sliced(position..);
-        (a, self)
+        (av, self)
     }
 
     /// Split the `StringData` at the first occurrence of the given byte sequence.
+    ///
+    /// # Errors
+    ///
+    /// Returns the input if the `needle` is not found.
     #[inline]
-    pub fn split_once_on(
-        self,
-        needle: &str,
-    ) -> Result<(StringData<'a>, StringData<'a>), StringData<'a>> {
-        let a = match crate::const_split_once_bytes(self.as_bytes(), needle.as_bytes()) {
-            Some((a, _)) => a.len(),
+    pub fn split_once_on(self, needle: &str) -> Result<(Self, Self), Self> {
+        let aa = match crate::const_split_once_bytes(self.as_bytes(), needle.as_bytes()) {
+            Some((aa, _)) => aa.len(),
             None => return Err(self),
         };
-        Ok(self.split_at(a))
+        Ok(self.split_at(aa))
     }
 
     /// Split the `StringData` at the first occurrence of the given str sequence.
     #[inline]
-    pub fn split_on<'b>(self, needle: &'b str) -> impl Iterator<Item = StringData<'a>> + Send + 'b
+    pub fn split_on<'b>(self, needle: &'b str) -> impl Iterator<Item = Self> + Send + 'b
     where
         'a: 'b,
     {
         self.data
             .split_on(needle.as_bytes())
+            // SAFETY: `ByteData` is guaranteed to be valid UTF-8, unless the user has used `unsafe` methods.
             .map(|x| unsafe { Self::from_bytedata_unchecked(x) })
     }
 
@@ -302,6 +351,7 @@ impl<'a> StringData<'a> {
     /// Transform any borrowed data into shared data. This is useful when you wish to change the lifetime of the data.
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     #[inline]
+    #[must_use]
     pub fn into_shared<'s>(self) -> StringData<'s> {
         let StringData { data } = self;
         StringData {
@@ -325,6 +375,12 @@ impl<'a> StringData<'a> {
             data: data.into_shared_range(range),
         }
     }
+
+    /// Iterate over the characters of the `StringData`.
+    #[inline]
+    pub fn iter(&self) -> core::str::Chars<'_> {
+        self.as_str().chars()
+    }
 }
 
 impl AsRef<[u8]> for StringData<'_> {
@@ -334,7 +390,7 @@ impl AsRef<[u8]> for StringData<'_> {
     }
 }
 
-impl<'a> Deref for StringData<'a> {
+impl Deref for StringData<'_> {
     type Target = str;
     #[inline]
     fn deref(&self) -> &Self::Target {
@@ -358,7 +414,7 @@ impl<'a> From<StringData<'a>> for ByteData<'a> {
 
 #[cfg(feature = "alloc")]
 #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
-impl<'a> TryFrom<SharedBytes> for StringData<'a> {
+impl TryFrom<SharedBytes> for StringData<'_> {
     type Error = SharedBytes;
     #[inline]
     fn try_from(dat: SharedBytes) -> Result<Self, Self::Error> {
@@ -368,14 +424,14 @@ impl<'a> TryFrom<SharedBytes> for StringData<'a> {
 
 #[cfg(feature = "alloc")]
 #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
-impl<'a> From<String> for StringData<'a> {
+impl From<String> for StringData<'_> {
     #[inline]
     fn from(dat: String) -> Self {
         Self::from_owned(dat)
     }
 }
 
-impl<'a, 'b> PartialEq<StringData<'b>> for StringData<'a> {
+impl<'b> PartialEq<StringData<'b>> for StringData<'_> {
     #[inline]
     fn eq(&self, other: &StringData<'b>) -> bool {
         self.as_bytes().eq(other.as_bytes())
@@ -424,14 +480,14 @@ impl PartialEq<StringData<'_>> for str {
     }
 }
 
-impl<'a, 'b> PartialEq<StringData<'a>> for &'b str {
+impl<'a> PartialEq<StringData<'a>> for &'_ str {
     #[inline]
     fn eq(&self, other: &StringData<'a>) -> bool {
         (*self).eq(other.as_str())
     }
 }
 
-impl<'a, 'b> PartialEq<StringData<'a>> for &'b [u8] {
+impl<'a> PartialEq<StringData<'a>> for &'_ [u8] {
     #[inline]
     fn eq(&self, other: &StringData<'a>) -> bool {
         (*self).eq(other.as_bytes())
@@ -474,16 +530,16 @@ impl PartialEq<StringData<'_>> for String {
     }
 }
 
-impl<'a, 'b> PartialEq<ByteData<'b>> for StringData<'a> {
+impl<'b> PartialEq<ByteData<'b>> for StringData<'_> {
     #[inline]
     fn eq(&self, other: &ByteData<'b>) -> bool {
         self.as_bytes().eq(other.as_slice())
     }
 }
 
-impl<'a, 'b> PartialEq<StringData<'a>> for ByteData<'b> {
+impl<'a> PartialEq<StringData<'a>> for ByteData<'_> {
     #[inline]
-    fn eq(&self, other: &StringData<'_>) -> bool {
+    fn eq(&self, other: &StringData<'a>) -> bool {
         self.as_slice().eq(other.as_bytes())
     }
 }
@@ -493,11 +549,11 @@ impl Eq for StringData<'_> {}
 impl core::hash::Hash for StringData<'_> {
     #[inline]
     fn hash<H: core::hash::Hasher>(&self, state: &mut H) {
-        self.as_str().hash(state)
+        self.as_str().hash(state);
     }
 }
 
-impl<'a, 'b> PartialOrd<StringData<'b>> for StringData<'a> {
+impl<'b> PartialOrd<StringData<'b>> for StringData<'_> {
     #[inline]
     fn partial_cmp(&self, other: &StringData<'b>) -> Option<core::cmp::Ordering> {
         self.as_str().partial_cmp(other.as_str())
@@ -568,16 +624,16 @@ impl PartialOrd<StringData<'_>> for String {
     }
 }
 
-impl<'a, 'b> PartialOrd<ByteData<'b>> for StringData<'a> {
+impl<'b> PartialOrd<ByteData<'b>> for StringData<'_> {
     #[inline]
     fn partial_cmp(&self, other: &ByteData<'b>) -> Option<core::cmp::Ordering> {
         self.as_bytes().partial_cmp(other.as_slice())
     }
 }
 
-impl<'a, 'b> PartialOrd<StringData<'a>> for ByteData<'b> {
+impl<'a> PartialOrd<StringData<'a>> for ByteData<'_> {
     #[inline]
-    fn partial_cmp(&self, other: &StringData<'_>) -> Option<core::cmp::Ordering> {
+    fn partial_cmp(&self, other: &StringData<'a>) -> Option<core::cmp::Ordering> {
         self.as_slice().partial_cmp(other.as_bytes())
     }
 }
@@ -591,6 +647,7 @@ impl Ord for StringData<'_> {
 
 impl core::fmt::Debug for StringData<'_> {
     #[inline]
+    #[allow(clippy::min_ident_chars)]
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         core::fmt::Debug::fmt(self.as_str(), f)
     }
@@ -598,6 +655,7 @@ impl core::fmt::Debug for StringData<'_> {
 
 impl core::fmt::Display for StringData<'_> {
     #[inline]
+    #[allow(clippy::min_ident_chars)]
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         core::fmt::Display::fmt(self.as_str(), f)
     }
@@ -610,7 +668,7 @@ impl<'a> AsRef<crate::ByteData<'a>> for StringData<'a> {
     }
 }
 
-impl<'a> Iterator for StringData<'a> {
+impl Iterator for StringData<'_> {
     type Item = char;
 
     #[inline]
@@ -618,9 +676,14 @@ impl<'a> Iterator for StringData<'a> {
         if self.is_empty() {
             return None;
         }
-        let c = self.as_str().chars().next().unwrap();
-        self.make_sliced(c.len_utf8()..);
-        Some(c)
+        let mut ci = self.as_str().char_indices();
+        let (_, ch) = ci.next()?;
+        let idx = match ci.next() {
+            Some((idx, _)) => idx,
+            None => self.len(),
+        };
+        self.make_sliced(idx..);
+        Some(ch)
     }
 
     #[inline]
@@ -629,23 +692,24 @@ impl<'a> Iterator for StringData<'a> {
     }
 }
 
-impl<'a, 'b> IntoIterator for &'b StringData<'a> {
+impl<'b> IntoIterator for &'b StringData<'_> {
     type Item = char;
     type IntoIter = core::str::Chars<'b>;
 
+    #[inline]
     fn into_iter(self) -> Self::IntoIter {
         self.as_str().chars()
     }
 }
 
-impl<'a> core::borrow::Borrow<str> for StringData<'a> {
+impl core::borrow::Borrow<str> for StringData<'_> {
     #[inline]
     fn borrow(&self) -> &str {
         self.as_str()
     }
 }
 
-impl<'a> Default for StringData<'a> {
+impl Default for StringData<'_> {
     #[inline]
     fn default() -> Self {
         StringData::empty()
