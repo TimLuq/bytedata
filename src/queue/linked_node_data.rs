@@ -2,8 +2,14 @@ use core::mem::MaybeUninit;
 
 use crate::ByteData;
 
+#[cfg(feature = "alloc")]
+const NODE_SIZE: usize = 15;
+
+#[cfg(not(feature = "alloc"))]
+const NODE_SIZE: usize = 23;
+
 pub(super) struct LinkedNodeData<'a> {
-    pub(super) data: [MaybeUninit<crate::ByteData<'a>>; 8],
+    pub(super) data: [MaybeUninit<crate::ByteData<'a>>; NODE_SIZE],
     pub(super) beg: u8,
     pub(super) len: u8,
 }
