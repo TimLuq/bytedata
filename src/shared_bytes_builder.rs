@@ -34,9 +34,9 @@ impl SharedBytesBuilder {
     }
 
     /// Creates a new `SharedBytesBuilder`.
-    /// 
+    ///
     /// # Panics
-    /// 
+    ///
     /// Panics if the alignment is not a power of two or is greater than 512 or the maximum allowed by the system.
     #[inline]
     #[must_use]

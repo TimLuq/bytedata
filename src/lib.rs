@@ -494,5 +494,46 @@ pub const fn const_split_once_str<'a>(
     }
 }
 
+/// Helper function to get the next UTF-8 char from a byte slice.
+/// Returns the value of the first char and the number of bytes the code point is encoded at.
+#[inline]
+#[must_use]
+pub const fn const_utf8_char_next(data: &[u8]) -> Option<(u32, u8)> {
+    let Some((first, data)) = data.split_first() else {
+        return None;
+    };
+    let first = *first;
+    let mut value;
+    let len = if first & 0b1000_0000 == 0 {
+        return Some((first as u32, 1));
+    } else if first & 0b1110_0000 == 0b1100_0000 {
+        value = (first & 0b0001_1111) as u32;
+        2
+    } else if first & 0b1111_0000 == 0b1110_0000 {
+        value = (first & 0b0000_1111) as u32;
+        3
+    } else if first & 0b1111_1000 == 0b1111_0000 {
+        value = (first & 0b0000_0111) as u32;
+        4
+    } else {
+        return None;
+    };
+    if data.len() < len {
+        return None;
+    }
+    let mut i = 1;
+    while i < len {
+        let byte = data[i];
+        if byte & 0b1100_0000 != 0b1000_0000 {
+            return None;
+        }
+        value = (value << 6_u8) | (byte & 0b0011_1111) as u32;
+        i += 1;
+    }
+    #[allow(clippy::cast_possible_truncation)]
+    let len = len as u8;
+    Some((value, len))
+}
+
 #[cfg(test)]
 mod test;
