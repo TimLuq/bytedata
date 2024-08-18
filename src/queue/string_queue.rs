@@ -365,6 +365,28 @@ impl<'a> StringQueue<'a> {
         // SAFETY: The range is checked to be valid UTF-8.
         unsafe { super::DrainChars::new(self, start, end) }
     }
+    
+    /// Find the first byte position of a char in the queue.
+    #[inline]
+    #[must_use]
+    pub fn find_char<F: FnMut(char) -> bool>(&mut self, mut fun: F) -> Option<usize> {
+        self.chars_indecies().find(|&(_, ch)| fun(ch)).map(|(position, _)| position)
+    }
+    
+    /// Move data to the returned `StringQueue` until the char predicate returns `false`.
+    #[inline]
+    #[must_use]
+    pub fn take_while<F: FnMut(char) -> bool>(&mut self, mut fun: F) -> Self {
+        let Some(position) = self.find_char(|ch| !fun(ch)) else {
+            return core::mem::replace(self, Self::new());
+        };
+        if position == 0 {
+            return Self::new();
+        }
+        let mut ret = self.queue.split_off(position);
+        core::mem::swap(&mut self.queue, &mut ret);
+        Self { queue: ret }
+    }
 }
 
 impl<'a> From<StringData<'a>> for StringQueue<'a> {
