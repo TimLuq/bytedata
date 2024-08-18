@@ -467,7 +467,7 @@ impl<'a> ByteQueue<'a> {
         let (start, end) = self.check_range(range);
         super::DrainBytes::new(self, start, end)
     }
-    
+
     /// Move data to the returned `ByteQueue` until the byte predicate returns `false`.
     #[inline]
     #[must_use]

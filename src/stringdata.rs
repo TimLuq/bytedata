@@ -312,6 +312,20 @@ impl<'a> StringData<'a> {
         av
     }
 
+    /// Takes and removes the first line from the string.
+    /// If a newline (`'\n'`) is found, the returned string will contain all data up to, and including, the newline.
+    /// If the queue does not contain a newline character, the returned string will contain all data currently in the queue.
+    #[inline]
+    #[must_use]
+    pub fn take_line(&mut self) -> Self {
+        let Some(position) = self.as_str().find('\n') else {
+            return core::mem::replace(self, Self::empty());
+        };
+        let av = self.sliced(0..position);
+        self.make_sliced(position..);
+        av
+    }
+
     /// Split the `StringData` at the given position.
     #[inline]
     #[must_use]

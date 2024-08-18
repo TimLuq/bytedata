@@ -365,14 +365,16 @@ impl<'a> StringQueue<'a> {
         // SAFETY: The range is checked to be valid UTF-8.
         unsafe { super::DrainChars::new(self, start, end) }
     }
-    
+
     /// Find the first byte position of a char in the queue.
     #[inline]
     #[must_use]
     pub fn find_char<F: FnMut(char) -> bool>(&mut self, mut fun: F) -> Option<usize> {
-        self.chars_indecies().find(|&(_, ch)| fun(ch)).map(|(position, _)| position)
+        self.chars_indecies()
+            .find(|&(_, ch)| fun(ch))
+            .map(|(position, _)| position)
     }
-    
+
     /// Move data to the returned `StringQueue` until the char predicate returns `false`.
     #[inline]
     #[must_use]
@@ -384,6 +386,20 @@ impl<'a> StringQueue<'a> {
             return Self::new();
         }
         let mut ret = self.queue.split_off(position);
+        core::mem::swap(&mut self.queue, &mut ret);
+        Self { queue: ret }
+    }
+
+    /// Takes and removes the first line from the queue.
+    /// If a newline (`'\n'`) is found, the returned queue will contain all data up to, and including, the newline.
+    /// If the queue does not contain a newline character, the returned queue will contain all data currently in the queue.
+    #[inline]
+    #[must_use]
+    pub fn take_line(&mut self) -> Self {
+        let Some(position) = self.find_char(|ch| ch == '\n') else {
+            return core::mem::replace(self, Self::new());
+        };
+        let mut ret = self.queue.split_off(position + 1);
         core::mem::swap(&mut self.queue, &mut ret);
         Self { queue: ret }
     }
