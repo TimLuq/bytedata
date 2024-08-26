@@ -441,7 +441,7 @@ impl SharedBytesBuilder {
         );
         #[allow(clippy::cast_possible_truncation)]
         {
-            self.len += len as u32;
+            self.off += len as u32;
         };
         ret
     }
