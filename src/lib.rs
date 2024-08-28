@@ -145,6 +145,9 @@ pub use self::bytedata::*;
 mod byte_string_render;
 pub use byte_string_render::*;
 
+mod char_indicies;
+pub use char_indicies::*;
+
 #[cfg(feature = "alloc")]
 mod shared_bytes;
 #[cfg(feature = "alloc")]
