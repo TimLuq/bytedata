@@ -1,6 +1,6 @@
 [package]
 name = "bytedata"
-version = "0.1.8"
+version = "0.1.9"
 edition = "2021"
 rust-version = "1.75"
 description = "Representation of a byte slice that is either static, borrowed, or shared."
@@ -20,6 +20,9 @@ http_02 = { package = "http", version = "0.2.4", optional = true }
 http_1 = { package = "http", version = "1", optional = true }
 nom_7 = { package = "nom", version = "7", optional = true }
 serde_1 = { package = "serde", version = "1.0.0", optional = true, default-features = false }
+
+[dev-dependencies]
+serde_1 = { package = "serde", version = "1.0.0", default-features = false, features = ["derive"] }
 
 [features]
 default = ["macros", "chunk"]

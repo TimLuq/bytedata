@@ -396,8 +396,16 @@ impl<'a> ByteQueue<'a> {
     /// Iterates over each chunk of bytedata in the queue.
     #[inline]
     #[must_use]
+    #[allow(clippy::should_implement_trait)]
     pub fn into_iter(self) -> ChunkIter<'a> {
         self.queue.into_iter()
+    }
+
+    /// Iterates over each borrowed chunk of bytedata in the queue.
+    #[inline]
+    #[must_use]
+    pub fn iter(&self) -> crate::queue::LinkedIter<'a, '_> {
+        self.queue.iter()
     }
 
     /// Iterates over each byte in the queue.

@@ -397,6 +397,15 @@ impl<'a> StringData<'a> {
     }
 }
 
+impl StringData<'static> {
+    /// Forces any borrowed str to be marked as static.
+    #[inline]
+    #[must_use]
+    pub fn statically_borrowed(self) -> Self {
+        StringData { data: self.data.statically_borrowed() }
+    }
+}
+
 impl AsRef<[u8]> for StringData<'_> {
     #[inline]
     fn as_ref(&self) -> &[u8] {

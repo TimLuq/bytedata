@@ -146,6 +146,7 @@ impl<'a> StringQueue<'a> {
     /// Iterates over each chunk of stringdata in the queue.
     #[inline]
     #[must_use]
+    #[allow(clippy::should_implement_trait)]
     pub fn into_iter(self) -> super::StrChunkIter<'a> {
         super::StrChunkIter::new(self.queue.queue)
     }

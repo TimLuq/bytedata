@@ -10,7 +10,8 @@ pub struct Utf8CharError {
 }
 
 /// An iterator over the indices of the UTF-8 characters in a byte slice.
-/// Can be iterated over like any iterator, or used with the [`next_const`] method to get the next character in a const context.
+///
+/// Can be iterated over like any iterator, or used with the [`Utf8CharIndices::next_const`] method to get the next character in a const context.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Utf8CharIndices<'a> {
     data: &'a [u8],
