@@ -14,6 +14,10 @@ impl ByteChunk {
     pub const LEN: usize = 14;
 
     /// Create a `ByteChunk` from a slice.
+    /// 
+    /// # Panics
+    /// 
+    /// Panics if the slice is larger than [`ByteChunk::LEN`].
     #[inline]
     #[must_use]
     pub const fn from_slice(data: &[u8]) -> Self {
@@ -34,6 +38,10 @@ impl ByteChunk {
     }
 
     /// Create a `ByteChunk` from a fixed-size array.
+    /// 
+    /// # Panics
+    /// 
+    /// Panics if the array is larger than [`ByteChunk::LEN`].
     #[inline]
     #[must_use]
     pub const fn from_array<const L: usize>(data: &[u8; L]) -> Self {

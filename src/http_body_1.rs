@@ -94,7 +94,7 @@ impl<'a> http_body::Body for crate::ByteQueue<'a> {
         let Some(mut aa) = this.pop_front() else {
             return Poll::Ready(None);
         };
-        if this.len() > 0xFFFF {
+        if aa.len() > 0xFFFF {
             this.push_front(aa.sliced(0xFFFF..));
             aa.make_sliced(0..0xFFFF);
         }

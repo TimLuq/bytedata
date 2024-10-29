@@ -303,6 +303,10 @@ impl<'a> StrSliceResult<'a> {
     }
 
     /// Returns the sliced `str` if the slice was valid. Otherwise panics.
+    /// 
+    /// # Panics
+    /// 
+    /// Will panic if the slice was [`StrSliceResult::OutOfBounds`] or would result in [`StrSliceResult::InvalidUtf8`].
     #[must_use]
     #[inline]
     pub const fn unwrap(self) -> &'a str {
