@@ -413,6 +413,13 @@ impl AsRef<[u8]> for StringData<'_> {
     }
 }
 
+impl AsRef<str> for StringData<'_> {
+    #[inline]
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
 impl Deref for StringData<'_> {
     type Target = str;
     #[inline]
@@ -445,12 +452,40 @@ impl TryFrom<SharedBytes> for StringData<'_> {
     }
 }
 
+impl<'a> TryFrom<ByteData<'a>> for StringData<'a> {
+    type Error = ByteData<'a>;
+    #[inline]
+    fn try_from(dat: ByteData<'a>) -> Result<Self, Self::Error> {
+        Self::try_from_bytedata(dat)
+    }
+}
+
 #[cfg(feature = "alloc")]
 #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl From<String> for StringData<'_> {
     #[inline]
     fn from(dat: String) -> Self {
         Self::from_owned(dat)
+    }
+}
+
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+impl<'a> From<StringData<'a>> for String {
+    #[inline]
+    fn from(dat: StringData<'a>) -> Self {
+        let dat = Vec::<u8>::from(dat.into_bytedata());
+        // SAFETY: `StringData` is guaranteed to be valid UTF-8, unless the user has used `unsafe` methods.
+        unsafe { Self::from_utf8_unchecked(dat) }
+    }
+}
+
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+impl<'a> From<StringData<'a>> for alloc::vec::Vec<u8> {
+    #[inline]
+    fn from(dat: StringData<'a>) -> Self {
+        Self::from(dat.into_bytedata())
     }
 }
 

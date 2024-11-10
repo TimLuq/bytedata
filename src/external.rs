@@ -24,6 +24,20 @@ impl<T: Sized> ExternalOps<T> {
 }
 
 /// A trait for types that can be used as external byte data.
+pub trait IntoExternalBytes: Sized {
+    /// The external byte data type.
+    type External: ExternalBytes + From<Self>;
+}
+
+impl<T: ExternalBytes> IntoExternalBytes for T {
+    type External = T;
+}
+
+impl IntoExternalBytes for alloc::string::String {
+    type External = alloc::vec::Vec<u8>;
+}
+
+/// A trait for types that can be used as external byte data.
 pub trait ExternalBytes: core::any::Any + Sync + Sized + 'static {
     /// The operations that can be performed on this type.
     const OPS: ExternalOps<Self>;
@@ -39,10 +53,6 @@ impl ExternalBytes for alloc::sync::Arc<[u8]> {
 
 impl ExternalBytes for alloc::vec::Vec<u8> {
     const OPS: ExternalOps<Self> = ExternalOps::new(Self::as_slice);
-}
-
-impl ExternalBytes for alloc::string::String {
-    const OPS: ExternalOps<Self> = ExternalOps::new(Self::as_bytes);
 }
 
 impl ExternalBytes for alloc::sync::Arc<str> {
@@ -80,6 +90,21 @@ impl ExtBytesRef {
     }
 }
 
+pub(crate) struct TakeExtBytesInner<'a, T> {
+    data: &'a mut T,
+    slice: &'a [u8],
+}
+impl<'a, T> TakeExtBytesInner<'a, T> {
+    #[inline]
+    pub(crate) fn with_slice_ref<'b, F: FnOnce(&'b T, &'b [u8]) -> R, R>(&'b self, fun: F) -> R where 'a: 'b {
+        fun(self.data, self.slice)
+    }
+    #[inline]
+    pub(crate) fn into_inner(self) -> &'a mut T {
+        self.data
+    }
+}
+
 #[repr(C)]
 pub(crate) struct ExtBytes {
     magic: [u8; 8],
@@ -96,8 +121,9 @@ pub(crate) const KIND_EXT_BYTES: u8 = 0b0000_0011;
 impl ExtBytes {
     const MAGIC: [u8; 8] = [KIND_EXT_BYTES, 0, 0, 0, 0, 0, 0, 0];
 
-    pub(crate) fn create<'a, T: ExternalBytes>(ext_bytes: T) -> crate::ByteData<'a> {
-        let as_slice = T::OPS.as_slice;
+    pub(crate) fn create<'a, T: IntoExternalBytes>(ext_bytes: T) -> crate::ByteData<'a> {
+        let ext_bytes = ext_bytes.into();
+        let as_slice = <T::External>::OPS.as_slice;
         {
             // Try to use the data as a short chunk
             let sl = as_slice(&ext_bytes);
@@ -107,8 +133,8 @@ impl ExtBytes {
             }
         }
 
-        let align = core::mem::align_of::<T>().max(core::mem::align_of::<ExtBytesWrapper>());
-        let mut alloc = core::mem::size_of::<T>() + core::mem::size_of::<ExtBytesWrapper>();
+        let align = core::mem::align_of::<T::External>().max(core::mem::align_of::<ExtBytesWrapper>());
+        let mut alloc = core::mem::size_of::<T::External>() + core::mem::size_of::<ExtBytesWrapper>();
         if alloc % align != 0 {
             alloc += align - (alloc % align);
         }
@@ -127,20 +153,20 @@ impl ExtBytes {
             }
 
             // SAFETY: `data` is a valid pointer to an allocated area.
-            let payload = unsafe { data.add(offset).cast::<T>() };
+            let payload = unsafe { data.add(offset).cast::<T::External>() };
             // SAFETY: writing to the location we just calculated is safe.
             unsafe {
                 payload.write(ext_bytes);
             };
 
-            // SAFETY: `payload` is a valid pointer to `T` as we just wrote to it.
+            // SAFETY: `payload` is a valid pointer to `T::External` as we just wrote to it.
             let sl = as_slice(unsafe { &*payload });
             let len = sl.len();
             let ptr = sl.as_ptr();
 
             if len <= crate::ByteChunk::LEN {
                 let aa = crate::ByteData::from_chunk_slice(sl);
-                if let Some(drop) = T::OPS.drop {
+                if let Some(drop) = <T::External>::OPS.drop {
                     // SAFETY: `payload` is a valid pointer to `T` which should be dropped.
                     unsafe { drop(payload) };
                 }
@@ -154,15 +180,15 @@ impl ExtBytes {
             let item = ExtBytesWrapper {
                 // SAFETY: `T::OPS.drop` is an optional function pointer.
                 drop: unsafe {
-                    core::mem::transmute::<Option<unsafe fn(*mut T)>, Option<unsafe fn(*mut ())>>(
-                        T::OPS.drop,
+                    core::mem::transmute::<Option<unsafe fn(*mut T::External)>, Option<unsafe fn(*mut ())>>(
+                        <T::External>::OPS.drop,
                     )
                 },
                 alloc,
                 ref_count: core::sync::atomic::AtomicU32::new(1),
                 #[allow(clippy::cast_possible_truncation)]
                 align: align as u32,
-                kind: core::any::TypeId::of::<T>(),
+                kind: core::any::TypeId::of::<T::External>(),
             };
             // SAFETY: `header` is a valid pointer to `ExtBytesWrapper`.
             unsafe { header.write(item) };
@@ -306,6 +332,42 @@ impl ExtBytes {
             core::slice::from_raw_parts(dd.ptr, dd.len)
         }))
     }
+
+    /// Take the inner value of the `ExtBytes` instance if the type matches and there is only one reference.
+    pub(crate) fn take_inner<T: core::any::Any, R, F: for<'a> FnOnce(TakeExtBytesInner<'a, T>) -> R>(
+        self,
+        fun: F,
+    ) -> Result<R, Self> {
+        debug_assert_eq!(
+            self.magic[0], KIND_EXT_BYTES,
+            "invalid magic number in ExtBytes"
+        );
+        debug_assert!(!self.data.is_null(), "null pointer in ExtBytes");
+        // SAFETY: `data` is a valid pointer to `ExtBytesRef`.
+        let dd = unsafe { &*self.data };
+        if dd.data.is_null() {
+            return Err(self);
+        }
+        // SAFETY: `ExtBytesRef.data` is a valid pointer to `ExtBytesWrapper`.
+        let ee = unsafe { &*dd.data };
+        if ee.kind != core::any::TypeId::of::<T>() || ee.ref_count.load(core::sync::atomic::Ordering::Relaxed) != 1 {
+            return Err(self);
+        }
+        let mut offset = core::mem::size_of::<ExtBytesWrapper>();
+        let align_mod = offset % ee.align as usize;
+        if align_mod != 0 {
+            offset += ee.align as usize - align_mod;
+        }
+        // SAFETY: `dd.data` is a valid pointer to the container data located at `offset`.
+        let t_val = unsafe { dd.data.cast::<u8>().add(offset) };
+        // SAFETY: `t_val` should now be cast to `*const T`.
+        let t_val = unsafe { &mut *t_val.cast::<T>().cast_mut() };
+        // SAFETY: `dd.ptr` is a valid pointer to the slice start.
+        let slic = unsafe { core::slice::from_raw_parts(dd.ptr, dd.len) };
+        let dat = fun(TakeExtBytesInner { data: t_val, slice: slic });
+        core::mem::drop(self);
+        Ok(dat)
+    }
 }
 
 impl Drop for ExtBytes {
@@ -376,5 +438,29 @@ impl Clone for ExtBytes {
             magic: Self::MAGIC,
             data: alloc::boxed::Box::into_raw(ret),
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::ByteData;
+
+    #[test]
+    /// Check if zero copy works for `Vec<u8>`.
+    fn test_bytedata_ext_vec() {
+        use alloc::vec::Vec;
+        let mut data = Vec::<u8>::with_capacity(64);
+        for i in 0..48 {
+            data.push(i);
+        }
+        let data_copy = data.clone();
+        let ptr = data.as_slice().as_ptr();
+        let mut data = ByteData::from_external(data);
+        data.make_sliced(..32);
+        assert_eq!(data.len(), 32);
+        let data = Vec::<u8>::from(data);
+        assert_eq!(data, &data_copy[..32]);
+        let check_ptr = data.as_slice().as_ptr();
+        assert!(core::ptr::addr_eq(ptr, check_ptr), "pointers should be equal");
     }
 }

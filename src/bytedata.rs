@@ -229,8 +229,17 @@ impl<'a> ByteData<'a> {
     #[inline]
     #[must_use]
     pub const fn from_static(dat: &'static [u8]) -> Self {
-        Self {
-            slice: ByteSlice::new(dat, true),
+        if dat.len() <= crate::byte_chunk::ByteChunk::LEN {
+            Self {
+                chunk: WrappedChunk {
+                    kind: KIND_CHUNK_MASK,
+                    data: crate::byte_chunk::ByteChunk::from_slice(dat),
+                },
+            }
+        } else {
+            Self {
+                slice: ByteSlice::new(dat, true),
+            }
         }
     }
 
@@ -286,6 +295,13 @@ impl<'a> ByteData<'a> {
             Self {
                 chunk: empty_chunk(),
             }
+        } else if dat.len() <= crate::byte_chunk::ByteChunk::LEN {
+            Self {
+                chunk: WrappedChunk {
+                    kind: KIND_CHUNK_MASK,
+                    data: crate::byte_chunk::ByteChunk::from_slice(dat),
+                },
+            }
         } else {
             Self {
                 slice: ByteSlice::new(dat, false),
@@ -305,7 +321,7 @@ impl<'a> ByteData<'a> {
     }
 
     #[cfg(feature = "alloc")]
-    /// Creates a `ByteData` from a `Vec<u8>`.
+    /// Creates a `ByteData` from a `Vec<u8>` using zero copy.
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     #[inline]
     #[must_use]
@@ -328,7 +344,7 @@ impl<'a> ByteData<'a> {
     /// Creates a `ByteData` from an externally kept byte sequence.
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     #[inline]
-    pub fn from_external<E: crate::external::ExternalBytes>(dat: E) -> Self {
+    pub fn from_external<E: crate::external::IntoExternalBytes>(dat: E) -> Self {
         crate::external::ExtBytes::create(dat)
     }
 
@@ -869,6 +885,7 @@ impl<'a> From<&'a [u8]> for ByteData<'a> {
 }
 
 #[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl From<SharedBytes> for ByteData<'_> {
     #[inline]
     fn from(dat: SharedBytes) -> Self {
@@ -881,14 +898,60 @@ impl From<SharedBytes> for ByteData<'_> {
 }
 
 #[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl From<Vec<u8>> for ByteData<'_> {
     #[inline]
     fn from(dat: Vec<u8>) -> Self {
-        Self::from_shared(dat.into())
+        let len = dat.len();
+        if len <= crate::byte_chunk::ByteChunk::LEN {
+            Self::from_chunk_slice(&dat)
+        } else if len < 32 {
+            Self::from_shared(dat.into())
+        } else {
+            Self::from_external(dat)
+        }
     }
 }
 
 #[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+impl<'a> From<ByteData<'a>> for Vec<u8> {
+    #[allow(clippy::missing_inline_in_public_items)]
+    fn from(dat: ByteData<'a>) -> Self {
+        if !matches!(dat.kind(), Kind::External) {
+            return dat.as_slice().to_vec();
+        }
+        // SAFETY: External state has been checked.
+        let dat = unsafe { core::mem::transmute::<ByteData<'a>, crate::external::ExtBytes>(dat) };
+
+        let res = dat.take_inner::<Self, Self, _>(|inner| {
+            let (off, len) = inner.with_slice_ref(|vec, slic| {
+                // SAFETY: the slice should be a valid subslice.
+                let offset = unsafe { slic.as_ptr().byte_offset_from(vec.as_slice().as_ptr()) };
+                #[allow(clippy::cast_sign_loss)]
+                let offset = offset as usize;
+                let len = slic.len();
+                debug_assert!(offset <= vec.len(), "ByteData::into_vec: offset out of bounds");
+                debug_assert!(offset + len <= vec.len(), "ByteData::into_vec: len out of bounds");
+                (offset, len)
+            });
+            let inner = inner.into_inner();
+            inner.truncate(len + off);
+            let mut inner = core::mem::take(inner);
+            if off != 0 {
+                core::mem::drop(inner.drain(0..off));
+            }
+            inner
+        });
+        match res {
+            Ok(ok) => ok,
+            Err(err) => err.as_slice().to_vec(),
+        }
+    }
+}
+
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl From<alloc::string::String> for ByteData<'_> {
     #[inline]
     fn from(dat: alloc::string::String) -> Self {
