@@ -440,11 +440,11 @@ impl<'a> ByteQueue<'a> {
     pub fn split_off(&mut self, at: usize) -> Self {
         fn inner<'a>(this: &mut ByteQueue<'a>, at: usize) -> ByteQueue<'a> {
             let mut out = ByteQueue::new();
-            let mut remain = at;
+            let mut remain = this.len() - at;
             while let Some(av) = this.pop_back() {
                 let len = av.len();
                 if len > remain {
-                    let (av, bv) = av.split_at(remain);
+                    let (av, bv) = av.split_at(len - remain);
                     this.push_back(av);
                     out.push_front(bv);
                     return out;
