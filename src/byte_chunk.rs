@@ -199,3 +199,25 @@ impl core::fmt::Debug for ByteChunk {
         core::fmt::Debug::fmt(&rend, f)
     }
 }
+
+/// Write bytes to the `ByteChunk`.
+/// The bytes are written to the end of the chunk and any write that would overflow the chunk results in an error.
+impl core::fmt::Write for ByteChunk {
+    #[inline]
+    #[allow(clippy::cast_possible_truncation, clippy::min_ident_chars)]
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        let s = s.as_bytes();
+        let len = s.len();
+        let self_len = self.len();
+        if len + self_len > Self::LEN {
+            return Err(core::fmt::Error);
+        }
+        let mut i = 0;
+        while i < len {
+            self.data[self_len + i] = s[i];
+            i += 1;
+        }
+        self.len += len as u8;
+        Ok(())
+    }
+}
