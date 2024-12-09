@@ -1,0 +1,29 @@
+[package]
+name = "bytedata-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "=0.4.7"
+
+[dependencies.bytedata]
+path = ".."
+features = ["arbitrary_1", "alloc", "std", "queue"]
+
+[[bin]]
+name = "bytedata"
+path = "fuzz_targets/bytedata.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "bytequeue"
+path = "fuzz_targets/bytequeue.rs"
+test = false
+doc = false
+bench = false

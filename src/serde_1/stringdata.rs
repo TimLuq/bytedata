@@ -6,11 +6,11 @@ use crate::StringData;
 impl StringData<'static> {
     #[cfg_attr(docsrs, doc(cfg(feature = "serde_1")))]
     /// Deserialize a string to a shared/owned `StringData` using `serde`.
-    /// 
+    ///
     /// The normal `Deserialize` implementation for `StringData` will deserialize to a borrowed `StringData`.
     /// The borrowed `StringData` will not be able to outlive a streaming deserialization process.
     /// Using this function in a `Deserialize` implementation will allow the `StringData` to have the static lifetime.
-    /// 
+    ///
     /// ```rust
     /// # use serde_1::Deserialize;
     /// # use bytedata::StringData;
@@ -24,7 +24,10 @@ impl StringData<'static> {
     /// ```
     #[inline]
     #[allow(clippy::missing_errors_doc)]
-    pub fn deserialize_static<'de, D>(deserializer: D) -> Result<Self, D::Error> where D: serde::de::Deserializer<'de> {
+    pub fn deserialize_static<'de, D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
         #[cfg(feature = "alloc")]
         {
             deserializer.deserialize_string(StaticStringDataVisitor)
@@ -129,7 +132,7 @@ impl<'de> serde::de::Visitor<'de> for StringDataVisitor {
 }
 
 /// Deserialize a string to a borrowed `StringData` using `serde`.
-/// 
+///
 /// ```rust
 /// # use serde_1::Deserialize;
 /// # use bytedata::StringData;
@@ -141,7 +144,7 @@ impl<'de> serde::de::Visitor<'de> for StringDataVisitor {
 ///     b: u8,
 /// }
 /// ```
-/// 
+///
 /// To deserialize to a shared/owned `StringData` with the static lifetime, use [`StringData::deserialize_static`].
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_1")))]
 impl<'de: 'a, 'a> serde::de::Deserialize<'de> for StringData<'a> {

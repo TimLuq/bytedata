@@ -444,9 +444,10 @@ impl Drop for SharedBytes {
                 #[allow(clippy::unwrap_used)]
                 let layout =
                     core::alloc::Layout::from_size_align(meta.len as usize, meta.align()).unwrap();
+                let dat = dat.cast_mut();
                 // SAFETY: `dat` is a valid pointer and the layout should be correct.
                 unsafe {
-                    alloc::alloc::dealloc(dat.cast_mut(), layout);
+                    alloc::alloc::dealloc(dat, layout);
                 };
             }
         }

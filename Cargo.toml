@@ -1,6 +1,6 @@
 [package]
 name = "bytedata"
-version = "0.1.12"
+version = "0.1.13"
 edition = "2021"
 rust-version = "1.75"
 description = "Representation of a byte slice that is either static, borrowed, or shared."
@@ -13,6 +13,7 @@ keywords = ["arc", "buffers", "zero-copy", "io"]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+arbitrary_1 = { package = "arbitrary", version = "1", optional = true, default-features = false }
 bytes_1 = { package = "bytes", version = "^1.7.1", optional = true, default-features = false }
 http-body_04 = { package = "http-body", version = "0.4.5", optional = true }
 http-body_1 = { package = "http-body", version = "1", optional = true }

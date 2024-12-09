@@ -402,7 +402,9 @@ impl StringData<'static> {
     #[inline]
     #[must_use]
     pub fn statically_borrowed(self) -> Self {
-        StringData { data: self.data.statically_borrowed() }
+        StringData {
+            data: self.data.statically_borrowed(),
+        }
     }
 }
 

@@ -123,13 +123,13 @@ impl<'a> LinkedRoot<'a> {
     #[inline]
     fn last(&self) -> Option<&super::linked_node_data::LinkedNodeData<'a>> {
         // SAFETY: if the pointer is non-null it points to a valid `LinkedNodeLeaf`.
-        unsafe { self.first.as_ref().map(|x| &x.data) }
+        unsafe { self.last.as_ref().map(|x| &x.data) }
     }
 
     #[inline]
     fn last_mut(&mut self) -> Option<&mut super::linked_node_data::LinkedNodeData<'a>> {
         // SAFETY: if the pointer is non-null it points to a valid `LinkedNodeLeaf`.
-        unsafe { self.first.as_mut().map(|x| &mut x.data) }
+        unsafe { self.last.as_mut().map(|x| &mut x.data) }
     }
 
     fn push_back_alloc(&mut self, data: ByteData<'a>) {

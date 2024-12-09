@@ -6,11 +6,11 @@ use crate::ByteData;
 impl ByteData<'static> {
     #[cfg_attr(docsrs, doc(cfg(feature = "serde_1")))]
     /// Deserialize a byte sequence to a shared/owned `ByteData` using `serde`.
-    /// 
+    ///
     /// The normal `Deserialize` implementation for `ByteData` will deserialize to a borrowed `ByteData`.
     /// The borrowed `ByteData` will not be able to outlive a streaming deserialization process.
     /// Using this function in a `Deserialize` implementation will allow the `ByteData` to have the static lifetime.
-    /// 
+    ///
     /// ```rust
     /// # use serde_1::Deserialize;
     /// # use bytedata::ByteData;
@@ -24,7 +24,10 @@ impl ByteData<'static> {
     /// ```
     #[inline]
     #[allow(clippy::missing_errors_doc)]
-    pub fn deserialize_static<'de, D>(deserializer: D) -> Result<Self, D::Error> where D: serde::de::Deserializer<'de> {
+    pub fn deserialize_static<'de, D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
         #[cfg(feature = "alloc")]
         {
             deserializer.deserialize_byte_buf(StaticByteDataVisitor)
@@ -53,7 +56,7 @@ impl serde::de::Visitor<'_> for StaticByteDataVisitor {
     fn expecting(&self, formatter: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         formatter.write_str("a byte array")
     }
-    
+
     #[allow(clippy::min_ident_chars)]
     #[inline]
     fn visit_bytes<E: serde::de::Error>(self, v: &[u8]) -> Result<Self::Value, E> {
@@ -123,7 +126,7 @@ impl<'de> serde::de::Visitor<'de> for ByteDataVisitor {
 }
 
 /// Deserialize a byte sequence to a borrowed `ByteData` using `serde`.
-/// 
+///
 /// ```rust
 /// # use serde_1::Deserialize;
 /// # use bytedata::ByteData;
@@ -135,7 +138,7 @@ impl<'de> serde::de::Visitor<'de> for ByteDataVisitor {
 ///     b: u8,
 /// }
 /// ```
-/// 
+///
 /// To deserialize to a shared/owned `ByteData` with the static lifetime, use [`ByteData::deserialize_static`].
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_1")))]
 impl<'de: 'a, 'a> serde::de::Deserialize<'de> for ByteData<'a> {

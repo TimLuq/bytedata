@@ -96,7 +96,10 @@ pub(crate) struct TakeExtBytesInner<'a, T> {
 }
 impl<'a, T> TakeExtBytesInner<'a, T> {
     #[inline]
-    pub(crate) fn with_slice_ref<'b, F: FnOnce(&'b T, &'b [u8]) -> R, R>(&'b self, fun: F) -> R where 'a: 'b {
+    pub(crate) fn with_slice_ref<'b, F: FnOnce(&'b T, &'b [u8]) -> R, R>(&'b self, fun: F) -> R
+    where
+        'a: 'b,
+    {
         fun(self.data, self.slice)
     }
     #[inline]
@@ -133,8 +136,10 @@ impl ExtBytes {
             }
         }
 
-        let align = core::mem::align_of::<T::External>().max(core::mem::align_of::<ExtBytesWrapper>());
-        let mut alloc = core::mem::size_of::<T::External>() + core::mem::size_of::<ExtBytesWrapper>();
+        let align =
+            core::mem::align_of::<T::External>().max(core::mem::align_of::<ExtBytesWrapper>());
+        let mut alloc =
+            core::mem::size_of::<T::External>() + core::mem::size_of::<ExtBytesWrapper>();
         if alloc % align != 0 {
             alloc += align - (alloc % align);
         }
@@ -180,9 +185,10 @@ impl ExtBytes {
             let item = ExtBytesWrapper {
                 // SAFETY: `T::OPS.drop` is an optional function pointer.
                 drop: unsafe {
-                    core::mem::transmute::<Option<unsafe fn(*mut T::External)>, Option<unsafe fn(*mut ())>>(
-                        <T::External>::OPS.drop,
-                    )
+                    core::mem::transmute::<
+                        Option<unsafe fn(*mut T::External)>,
+                        Option<unsafe fn(*mut ())>,
+                    >(<T::External>::OPS.drop)
                 },
                 alloc,
                 ref_count: core::sync::atomic::AtomicU32::new(1),
@@ -334,7 +340,11 @@ impl ExtBytes {
     }
 
     /// Take the inner value of the `ExtBytes` instance if the type matches and there is only one reference.
-    pub(crate) fn take_inner<T: core::any::Any, R, F: for<'a> FnOnce(TakeExtBytesInner<'a, T>) -> R>(
+    pub(crate) fn take_inner<
+        T: core::any::Any,
+        R,
+        F: for<'a> FnOnce(TakeExtBytesInner<'a, T>) -> R,
+    >(
         self,
         fun: F,
     ) -> Result<R, Self> {
@@ -350,7 +360,9 @@ impl ExtBytes {
         }
         // SAFETY: `ExtBytesRef.data` is a valid pointer to `ExtBytesWrapper`.
         let ee = unsafe { &*dd.data };
-        if ee.kind != core::any::TypeId::of::<T>() || ee.ref_count.load(core::sync::atomic::Ordering::Relaxed) != 1 {
+        if ee.kind != core::any::TypeId::of::<T>()
+            || ee.ref_count.load(core::sync::atomic::Ordering::Relaxed) != 1
+        {
             return Err(self);
         }
         let mut offset = core::mem::size_of::<ExtBytesWrapper>();
@@ -364,7 +376,10 @@ impl ExtBytes {
         let t_val = unsafe { &mut *t_val.cast::<T>().cast_mut() };
         // SAFETY: `dd.ptr` is a valid pointer to the slice start.
         let slic = unsafe { core::slice::from_raw_parts(dd.ptr, dd.len) };
-        let dat = fun(TakeExtBytesInner { data: t_val, slice: slic });
+        let dat = fun(TakeExtBytesInner {
+            data: t_val,
+            slice: slic,
+        });
         core::mem::drop(self);
         Ok(dat)
     }
@@ -461,6 +476,9 @@ mod test {
         let data = Vec::<u8>::from(data);
         assert_eq!(data, &data_copy[..32]);
         let check_ptr = data.as_slice().as_ptr();
-        assert!(core::ptr::addr_eq(ptr, check_ptr), "pointers should be equal");
+        assert!(
+            core::ptr::addr_eq(ptr, check_ptr),
+            "pointers should be equal"
+        );
     }
 }

@@ -1,6 +1,7 @@
 use crate::StringData;
 
 #[test]
+#[allow(clippy::string_slice)]
 fn test_stringdata() {
     let s0 = StringData::from_borrowed("hello world");
     assert_eq!(s0, "hello world");
@@ -13,6 +14,7 @@ fn test_stringdata() {
 
 #[cfg(feature = "alloc")]
 #[test]
+#[allow(clippy::string_slice)]
 fn test_stringdata_alloc() {
     use alloc::borrow::ToOwned;
 

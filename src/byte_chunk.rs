@@ -14,9 +14,9 @@ impl ByteChunk {
     pub const LEN: usize = 14;
 
     /// Create a `ByteChunk` from a slice.
-    /// 
+    ///
     /// # Panics
-    /// 
+    ///
     /// Panics if the slice is larger than [`ByteChunk::LEN`].
     #[inline]
     #[must_use]
@@ -38,9 +38,9 @@ impl ByteChunk {
     }
 
     /// Create a `ByteChunk` from a fixed-size array.
-    /// 
+    ///
     /// # Panics
-    /// 
+    ///
     /// Panics if the array is larger than [`ByteChunk::LEN`].
     #[inline]
     #[must_use]

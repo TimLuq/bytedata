@@ -190,6 +190,9 @@ mod external {
     pub(crate) const KIND_EXT_BYTES: u8 = 0b0000_0011;
 }
 
+#[cfg(feature = "arbitrary_1")]
+mod arbitrary_1;
+
 #[cfg(feature = "bytes_1")]
 mod bytes_1;
 
@@ -303,9 +306,9 @@ impl<'a> StrSliceResult<'a> {
     }
 
     /// Returns the sliced `str` if the slice was valid. Otherwise panics.
-    /// 
+    ///
     /// # Panics
-    /// 
+    ///
     /// Will panic if the slice was [`StrSliceResult::OutOfBounds`] or would result in [`StrSliceResult::InvalidUtf8`].
     #[must_use]
     #[inline]
@@ -503,7 +506,7 @@ pub const fn const_split_once_str<'a>(
 
 /// Helper function to get the next UTF-8 char from a byte slice.
 /// Returns the value of the first char and the number of bytes the code point is encoded at.
-/// 
+///
 /// Returns `(0, 0)` if the input is empty or if the next value incorrectly encodes a code point.
 #[inline]
 #[must_use]

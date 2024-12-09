@@ -18,3 +18,16 @@ fn test_shared_bytes_from_slice() {
     core::mem::drop(s1);
     assert_eq!(s2.ref_count(), 1);
 }
+
+#[test]
+fn test_shared_bytes_from_builder() {
+    let mut s0 = crate::shared_bytes_builder::SharedBytesBuilder::with_capacity(8);
+    let mut s1 = crate::shared_bytes_builder::SharedBytesBuilder::with_capacity(64);
+    s1.extend_from_slice(b"2");
+    s0.reserve(256);
+    s0.extend_from_slice(b"hello world");
+    s0.extend_from_slice(b"2");
+    let s0 = s0.build();
+    assert_eq!(s0.as_slice(), b"hello world2".as_slice());
+    assert_eq!(s0.ref_count(), 1);
+}

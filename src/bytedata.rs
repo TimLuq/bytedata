@@ -195,13 +195,13 @@ impl Drop for ByteData<'_> {
             #[cfg(feature = "alloc")]
             // SAFETY: Shared state has been checked.
             Kind::Shared => unsafe {
-                core::ptr::drop_in_place(&mut self.shared);
+                core::mem::ManuallyDrop::drop(&mut self.shared);
                 self.chunk = empty_chunk();
             },
             #[cfg(feature = "alloc")]
             // SAFETY: External state has been checked.
             Kind::External => unsafe {
-                core::ptr::drop_in_place(&mut self.external);
+                core::mem::ManuallyDrop::drop(&mut self.external);
                 self.chunk = empty_chunk();
             },
         }
@@ -931,8 +931,14 @@ impl<'a> From<ByteData<'a>> for Vec<u8> {
                 #[allow(clippy::cast_sign_loss)]
                 let offset = offset as usize;
                 let len = slic.len();
-                debug_assert!(offset <= vec.len(), "ByteData::into_vec: offset out of bounds");
-                debug_assert!(offset + len <= vec.len(), "ByteData::into_vec: len out of bounds");
+                debug_assert!(
+                    offset <= vec.len(),
+                    "ByteData::into_vec: offset out of bounds"
+                );
+                debug_assert!(
+                    offset + len <= vec.len(),
+                    "ByteData::into_vec: len out of bounds"
+                );
                 (offset, len)
             });
             let inner = inner.into_inner();
