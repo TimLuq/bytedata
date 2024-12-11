@@ -445,6 +445,44 @@ impl SharedBytesBuilder {
         };
         ret
     }
+
+    /// Apply a function to the unused reserved bytes in an async context.
+    ///
+    /// The function is passed a pinned mutable slice of `MaybeUninit<u8>` and returns a future that when ready outputs a tuple of the final return value and the number of bytes filled.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the `fun` function returns a length greater than the reserved capacity.
+    #[inline]
+    pub async fn apply_unfilled_async<'l, R, Fut, Fun>(&'l mut self, fun: Fun) -> R
+    where
+        Fut: core::future::Future<Output = (R, usize)> + Send + 'l,
+        Fun: (FnOnce(core::pin::Pin<&'l mut [core::mem::MaybeUninit<u8>]>) -> Fut) + Send + 'l,
+    {
+        let data = if self.len == 0 || self.off == self.len {
+            &mut [] as &mut [core::mem::MaybeUninit<u8>]
+        } else {
+            let off = self.off as usize;
+            // SAFETY: `off` is always less than or equal to `len`.
+            let dat = unsafe { self.dat.add(off) };
+            let dat = dat.cast::<core::mem::MaybeUninit<u8>>();
+            let len = self.len as usize - off;
+            // SAFETY: `len` is the allocated length minus the start offset
+            unsafe { core::slice::from_raw_parts_mut(dat, len) }
+        };
+        let maxlen = data.len();
+        let data = core::pin::Pin::new(data);
+        let (ret, len) = fun(data).await;
+        assert!(
+            len <= maxlen,
+            "SharedBytesBuilder::apply_unfilled_async: returned length exceeds reserved capacity"
+        );
+        #[allow(clippy::cast_possible_truncation)]
+        {
+            self.off += len as u32;
+        };
+        ret
+    }
 }
 
 impl Default for SharedBytesBuilder {
