@@ -174,6 +174,10 @@ pub use self::macros::*;
 mod byte_chunk;
 pub use byte_chunk::ByteChunk;
 
+#[cfg(feature = "interning")]
+#[cfg_attr(docsrs, doc(cfg(feature = "interning")))]
+pub mod interning;
+
 #[cfg(feature = "queue")]
 #[cfg_attr(docsrs, doc(cfg(feature = "queue")))]
 pub mod queue;

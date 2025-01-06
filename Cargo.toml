@@ -22,23 +22,35 @@ http_1 = { package = "http", version = "1", optional = true }
 nom_7 = { package = "nom", version = "7", optional = true }
 serde_1 = { package = "serde", version = "1.0.0", optional = true, default-features = false }
 
+dashmap = { version = "6.1", default-features = false, optional = true }
+
 [dev-dependencies]
 serde_1 = { package = "serde", version = "1.0.0", default-features = false, features = ["derive"] }
 
 [features]
 default = ["macros", "chunk"]
 
+## Feature that enables allocating byte data. Without this feature, only borrowed bytes and 14-byte data or less can be used.
 alloc = ["serde_1?/alloc"]
+## Chunks is always enabled, but is still a feature for backwards compatibility. *Deprecated*
 chunk = []
+## Exposes a trait and a static implementation for interning of byte/str data.
+interning = ["alloc", "dep:dashmap"]
+## Exposes `concat_str_static` and `concat_bytes_static` macros for compile-time concatenation of byte/str data.
 macros = []
+## Exposes structures `ByteQueue` and `StringQueue` for efficient pushing and popping of byte/str data.
 queue = []
+## Implements traits from `std`.
 std = ["alloc"]
 
 nightly = []
 core_io_borrowed_buf = []
 
+## Makes implementations of `Buf` and `BufMut` form `bytes@1` for relevant types. Also makes optimizations for conversion between `Bytes` and `ByteData`.
 bytes_1 = ["dep:bytes_1"]
+## Removes some optimizations for `Bytes` and `ByteData` conversion, due to `bytes` not having neither an exposed nor stable API for this. This can be activated in case `bytes` makes a change which causes the converted data to be incorrect or segfault.
 bytes_1_safe = ["bytes_1"]
+
 http-body_04 = ["dep:http-body_04", "dep:http_02", "bytes_1"]
 http-body_1 = ["dep:http-body_1", "dep:http_1", "bytes_1"]
 
