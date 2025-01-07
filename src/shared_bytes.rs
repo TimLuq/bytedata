@@ -78,11 +78,6 @@ pub struct SharedBytes {
     pub(crate) off: u32,
 }
 
-// SAFETY: `SharedBytes` is a wrapper around a pointer to a `SharedBytesMeta` and data on the heap.
-unsafe impl Sync for SharedBytes {}
-// SAFETY: `SharedBytes` is a wrapper around a pointer to a `SharedBytesMeta` and data on the heap.
-unsafe impl Send for SharedBytes {}
-
 impl SharedBytes {
     /// An empty `SharedBytes`.
     pub const EMPTY: Self = Self {

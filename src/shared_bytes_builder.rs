@@ -537,6 +537,13 @@ impl core::ops::DerefMut for SharedBytesBuilder {
     }
 }
 
+impl From<SharedBytesBuilder> for crate::ByteData<'_> {
+    #[inline]
+    fn from(value: SharedBytesBuilder) -> Self {
+        value.build().into()
+    }
+}
+
 impl core::iter::Extend<u8> for SharedBytesBuilder {
     #[inline]
     fn extend<I: IntoIterator<Item = u8>>(&mut self, iter: I) {

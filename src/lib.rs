@@ -158,6 +158,11 @@ mod shared_bytes_builder;
 #[cfg(feature = "alloc")]
 pub use self::shared_bytes_builder::*;
 
+#[cfg(feature = "alloc")]
+mod shared_str_builder;
+#[cfg(feature = "alloc")]
+pub use self::shared_str_builder::*;
+
 mod stringdata;
 pub use self::stringdata::*;
 

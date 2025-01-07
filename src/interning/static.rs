@@ -165,19 +165,32 @@ impl super::ByteInterning<'static> for StaticInterning {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    #![allow(clippy::unwrap_used)]
     use super::super::ByteInterning;
+    use super::*;
 
     #[test]
     fn test_static_interning_borrowed() {
         let interning = StaticInterning::new(32);
         let borrowed = ByteData::from_borrowed(b"Hello World, 1234567890!");
         let value = interning.intern(borrowed.clone()).unwrap();
-        assert!(!core::ptr::addr_eq(value.as_slice().as_ptr(), borrowed.as_slice().as_ptr()), "The interned value should be a copy.");
-        assert_eq!(value, borrowed, "The interned value should be equal to the input.");
+        assert!(
+            !core::ptr::addr_eq(value.as_slice().as_ptr(), borrowed.as_slice().as_ptr()),
+            "The interned value should be a copy."
+        );
+        assert_eq!(
+            value, borrowed,
+            "The interned value should be equal to the input."
+        );
         let value2 = interning.intern(borrowed.clone()).unwrap();
-        assert_eq!(value2, borrowed, "The interned value should be equal to the input.");
-        assert!(core::ptr::addr_eq(value.as_slice().as_ptr(), value2.as_slice().as_ptr()), "The interned value should return the same copy.");
+        assert_eq!(
+            value2, borrowed,
+            "The interned value should be equal to the input."
+        );
+        assert!(
+            core::ptr::addr_eq(value.as_slice().as_ptr(), value2.as_slice().as_ptr()),
+            "The interned value should return the same copy."
+        );
     }
 
     #[test]
@@ -186,10 +199,22 @@ mod tests {
         let borrowed = ByteData::from_borrowed(b"Hello World, 1234567890!");
         let shared = borrowed.clone().into_shared();
         let value = interning.intern(shared.clone()).unwrap();
-        assert!(core::ptr::addr_eq(value.as_slice().as_ptr(), shared.as_slice().as_ptr()), "The interned value should return a shared instance.");
-        assert_eq!(value, borrowed, "The interned value should be equal to the input.");
+        assert!(
+            core::ptr::addr_eq(value.as_slice().as_ptr(), shared.as_slice().as_ptr()),
+            "The interned value should return a shared instance."
+        );
+        assert_eq!(
+            value, borrowed,
+            "The interned value should be equal to the input."
+        );
         let value2 = interning.intern(borrowed.clone()).unwrap();
-        assert_eq!(value2, borrowed, "The interned value should be equal to the input.");
-        assert!(core::ptr::addr_eq(value.as_slice().as_ptr(), value2.as_slice().as_ptr()), "The interned value should return the same copy.");
+        assert_eq!(
+            value2, borrowed,
+            "The interned value should be equal to the input."
+        );
+        assert!(
+            core::ptr::addr_eq(value.as_slice().as_ptr(), value2.as_slice().as_ptr()),
+            "The interned value should return the same copy."
+        );
     }
 }

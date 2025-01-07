@@ -330,7 +330,7 @@ impl<'a> ByteQueue<'a> {
                 let Some(av) = sl.iter().position(|x| *x == first_byte) else {
                     sect = match chunks.next() {
                         Some(vv) => vv,
-                        None => return None,
+                        _ => return None,
                     };
                     start_offset = 0;
                     start_chunk += 1;
@@ -352,7 +352,7 @@ impl<'a> ByteQueue<'a> {
                     let Some(bv) = nxt else {
                         sect = match chunks.next() {
                             Some(vv) => vv,
-                            None => return None,
+                            _ => return None,
                         };
                         sl = sect.as_slice().iter();
                         continue;
