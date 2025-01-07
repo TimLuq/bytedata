@@ -537,6 +537,15 @@ impl core::fmt::Debug for crate::StringQueue<'_> {
     }
 }
 
+impl core::fmt::Write for crate::StringQueue<'_> {
+    #[inline]
+    #[allow(clippy::min_ident_chars)]
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        self.push_back(StringData::from_borrowed(s).into_shared());
+        Ok(())
+    }
+}
+
 impl Default for crate::StringQueue<'_> {
     #[inline]
     fn default() -> Self {
