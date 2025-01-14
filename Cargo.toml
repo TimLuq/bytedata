@@ -41,7 +41,7 @@ macros = []
 ## Exposes structures `ByteQueue` and `StringQueue` for efficient pushing and popping of byte/str data.
 queue = []
 ## Implements traits from `std`.
-std = ["alloc"]
+std = ["alloc", "bytes_1?/std"]
 
 nightly = []
 core_io_borrowed_buf = []

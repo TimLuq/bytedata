@@ -111,4 +111,15 @@ impl bytes::Buf for ByteQueue<'_> {
         }
         ret.freeze()
     }
+
+    #[cfg(feature = "std")]
+    #[inline]
+    fn chunks_vectored<'a>(&'a self, dst: &mut [std::io::IoSlice<'a>]) -> usize {
+        let mut i = 0;
+        for chunk in self.chunks().take(dst.len()) {
+            dst[i] = std::io::IoSlice::new(chunk.as_slice());
+            i += 1;
+        }
+        i
+    }
 }
