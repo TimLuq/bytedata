@@ -553,6 +553,15 @@ impl core::iter::Extend<u8> for SharedBytesBuilder {
     }
 }
 
+impl<'a> core::iter::Extend<&'a u8> for SharedBytesBuilder {
+    #[inline]
+    fn extend<I: IntoIterator<Item = &'a u8>>(&mut self, iter: I) {
+        for i in iter {
+            self.extend_from_slice(core::slice::from_ref(i));
+        }
+    }
+}
+
 impl<'a> core::iter::Extend<&'a [u8]> for SharedBytesBuilder {
     #[inline]
     fn extend<I: IntoIterator<Item = &'a [u8]>>(&mut self, iter: I) {
