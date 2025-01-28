@@ -915,6 +915,27 @@ impl From<Vec<u8>> for ByteData<'_> {
 
 #[cfg(feature = "alloc")]
 #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+impl<'a> From<alloc::borrow::Cow<'a, [u8]>> for ByteData<'a> {
+    #[inline]
+    fn from(data: alloc::borrow::Cow<'a, [u8]>) -> Self {
+        ByteData::from_cow(data)
+    }
+}
+
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+impl<'a> From<alloc::borrow::Cow<'a, str>> for ByteData<'a> {
+    #[inline]
+    fn from(data: alloc::borrow::Cow<'a, str>) -> Self {
+        match data {
+            alloc::borrow::Cow::Borrowed(borr) => Self::from_borrowed(borr.as_bytes()),
+            alloc::borrow::Cow::Owned(ow) => Self::from(ow),
+        }
+    }
+}
+
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl<'a> From<ByteData<'a>> for Vec<u8> {
     #[allow(clippy::missing_inline_in_public_items)]
     fn from(dat: ByteData<'a>) -> Self {

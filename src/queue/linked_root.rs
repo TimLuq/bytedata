@@ -3,9 +3,11 @@ use crate::ByteData;
 
 #[cfg(feature = "alloc")]
 pub(super) struct LinkedRoot<'a> {
+    /// The first chunk in the queue, available for optimized use.
     pub(super) chamber: ByteData<'a>,
     pub(super) first: *mut super::linked_node_leaf::LinkedNodeLeaf<'a>,
     pub(super) last: *mut super::linked_node_leaf::LinkedNodeLeaf<'a>,
+    /// The number of chunks in the queue.
     pub(super) count: usize,
 }
 
@@ -246,6 +248,60 @@ impl<'a> LinkedRoot<'a> {
         // SAFETY: if the pointer is non-null it points to a valid `LinkedNodeLeaf`.
         LinkedIter::new(chamber, unsafe { self.first.as_ref() })
     }
+
+    pub(super) fn append(&mut self, mut other: Self) {
+        if other.count == 0 {
+            return;
+        }
+        if self.count == 0 {
+            *self = other;
+            return;
+        }
+        if self.count == 1 && !self.chamber.is_empty() {
+            other.push_front(core::mem::replace(
+                &mut self.chamber,
+                ByteData::from_chunk(&[0]),
+            ));
+            *self = other;
+            return;
+        }
+
+        // attempt to move the chambered item without allocating
+        if !other.chamber.is_empty() {
+            let chamber = core::mem::replace(&mut other.chamber, ByteData::empty());
+            other.count -= 1;
+            // SAFETY: if the pointer is non-null it points to a valid `LinkedNodeLeaf`.
+            if let Some(fst) = unsafe { other.first.as_mut() } {
+                if let Err(val) = fst.data.push_front(chamber) {
+                    self.push_back(val);
+                }
+            } else {
+                self.push_back(chamber);
+            }
+            if other.count == 0 {
+                return;
+            }
+        }
+
+        // SAFETY: if the pointer is non-null it points to a valid `LinkedNodeLeaf`.
+        if let Some(last) = unsafe { self.last.as_mut() } {
+            // SAFETY: if the pointer is non-null it points to a valid `LinkedNodeLeaf`.
+            if let Some(first) = unsafe { other.first.as_mut() } {
+                last.next = first;
+                first.prev = last;
+                self.last = other.last;
+            } else {
+                unreachable!("invalid state at append");
+            }
+        } else {
+            self.first = other.first;
+            self.last = other.last;
+        }
+        self.count += other.count;
+        other.first = core::ptr::null_mut();
+        other.last = core::ptr::null_mut();
+        other.count = 0;
+    }
 }
 
 impl<'a> LinkedRoot<'a> {
@@ -282,12 +338,6 @@ impl<'a> LinkedRoot<'a> {
 
     pub(super) fn push_front(&mut self, mut data: ByteData<'a>) {
         if data.is_empty() {
-            return;
-        }
-        #[cfg(feature = "alloc")]
-        if self.count == 0 {
-            self.chamber = data;
-            self.count = 1;
             return;
         }
         #[cfg(feature = "alloc")]

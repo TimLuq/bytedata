@@ -537,6 +537,8 @@ impl core::fmt::Debug for crate::StringQueue<'_> {
     }
 }
 
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl core::fmt::Write for crate::StringQueue<'_> {
     #[inline]
     #[allow(clippy::min_ident_chars)]

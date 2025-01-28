@@ -23,7 +23,7 @@ fn test_macros_format_shared() {
     assert!(hw.ends_with(choice));
 }
 
-#[cfg(feature = "queue")]
+#[cfg(all(feature = "alloc", feature = "queue"))]
 #[test]
 fn test_macros_format_queue() {
     static CHOICES: &[&str] = &[" you", " world", "... hello... hello", "oooooooo!"];

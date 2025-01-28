@@ -473,6 +473,18 @@ impl From<String> for StringData<'_> {
 
 #[cfg(feature = "alloc")]
 #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+impl<'a> From<alloc::borrow::Cow<'a, str>> for StringData<'a> {
+    #[inline]
+    fn from(data: alloc::borrow::Cow<'a, str>) -> Self {
+        match data {
+            alloc::borrow::Cow::Borrowed(borr) => Self::from_borrowed(borr),
+            alloc::borrow::Cow::Owned(ow) => Self::from_owned(ow),
+        }
+    }
+}
+
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl<'a> From<StringData<'a>> for String {
     #[inline]
     fn from(dat: StringData<'a>) -> Self {

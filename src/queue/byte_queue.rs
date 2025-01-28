@@ -422,11 +422,21 @@ impl<'a> ByteQueue<'a> {
         OwnedByteIter::new(self)
     }
 
-    /// Adds another `ByteQueue`'s chunks to this queue. May be optimized in the future.
+    /// Adds another `ByteQueue`'s chunks to this queue.
     #[inline]
+    #[cfg(not(feature = "alloc"))]
     pub fn append(&mut self, other: Self) {
-        // TODO: optimize by adding full regions instead of just chunks at to save on region allocations
         self.extend(other.into_iter());
+    }
+
+    /// Adds another `ByteQueue`'s chunks to this queue.
+    #[inline]
+    #[cfg(feature = "alloc")]
+    pub fn append(&mut self, mut other: Self) {
+        self.remain += other.remain;
+        other.remain = 0;
+        self.queue
+            .append(core::mem::replace(&mut other.queue, LinkedRoot::new()));
     }
 
     /// Split the queue at a certain index.
@@ -851,7 +861,7 @@ impl core::cmp::Ord for ByteQueue<'_> {
                     }
                     #[allow(clippy::wildcard_enum_match_arm)]
                     match av.cmp(bv) {
-                        core::cmp::Ordering::Equal => continue,
+                        core::cmp::Ordering::Equal => (),
                         x => return x,
                     }
                 }
@@ -895,7 +905,7 @@ impl PartialOrd<[u8]> for ByteQueue<'_> {
                     }
                     #[allow(clippy::wildcard_enum_match_arm)]
                     match av.cmp(bv) {
-                        core::cmp::Ordering::Equal => continue,
+                        core::cmp::Ordering::Equal => (),
                         xy => return Some(xy),
                     }
                 }
@@ -994,5 +1004,15 @@ impl Default for ByteQueue<'_> {
     #[inline]
     fn default() -> Self {
         ByteQueue::new()
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl core::fmt::Write for crate::ByteQueue<'_> {
+    #[inline]
+    #[allow(clippy::min_ident_chars)]
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        self.push_back(crate::ByteData::from_borrowed(s.as_bytes()).into_shared());
+        Ok(())
     }
 }
