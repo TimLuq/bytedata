@@ -500,6 +500,39 @@ impl<'a> ByteQueue<'a> {
         core::mem::swap(self, &mut ret);
         ret
     }
+
+    /// Replaces a range of bytes with another `ByteData`.
+    /// 
+    /// # Panics
+    /// 
+    /// Panics if the range is out of bounds.
+    #[inline]
+    pub fn replace_range<R: RangeBounds<usize>>(&mut self, range: R, replace_with: ByteData<'a>) {
+        let (start, end) = self.check_range(range);
+        self.replace_range_inner(start, end, replace_with);
+    }
+
+    pub(super) fn replace_range_inner(
+        &mut self,
+        start: usize,
+        end: usize,
+        replace_with: ByteData<'a>,
+    ) {
+        if start == 0 {
+            self.consume(end);
+            self.push_front(replace_with);
+            return;
+        }
+        if end == self.len() {
+            core::mem::drop(self.drain(start..end));
+            self.push_back(replace_with);
+            return;
+        }
+        let mut out = self.split_off(start);
+        out.consume(end - start);
+        self.push_back(replace_with);
+        self.append(out);
+    }
 }
 
 impl<'a> From<ByteData<'a>> for ByteQueue<'a> {

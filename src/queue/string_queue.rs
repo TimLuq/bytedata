@@ -404,6 +404,17 @@ impl<'a> StringQueue<'a> {
         core::mem::swap(&mut self.queue, &mut ret);
         Self { queue: ret }
     }
+
+    /// Replace a range in the queue with a new string.
+    /// 
+    /// # Panics
+    /// 
+    /// Panics if the range boundary is out of bounds or falls in the middle of a multi-byte UTF-8 character.
+    #[inline]
+    pub fn replace_range<R: core::ops::RangeBounds<usize>>(&mut self, range: R, replace_with: StringData<'a>) {
+        let (start, end) = self.check_range(range);
+        self.queue.replace_range_inner(start, end, replace_with.into_bytedata());
+    }
 }
 
 impl<'a> From<StringData<'a>> for StringQueue<'a> {
