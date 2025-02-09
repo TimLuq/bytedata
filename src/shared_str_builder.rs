@@ -2,6 +2,7 @@ use super::shared_bytes_builder::SharedBytesBuilder;
 
 /// A builder for a shared string.
 /// This can be thought of as a `String` that can then be frozen into a `StringData`.
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 #[repr(transparent)]
 pub struct SharedStrBuilder {
     inner: SharedBytesBuilder,
@@ -169,6 +170,7 @@ impl<'a> From<&'a str> for SharedStrBuilder {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl From<SharedStrBuilder> for SharedBytesBuilder {
     #[inline]
     fn from(value: SharedStrBuilder) -> Self {
@@ -176,6 +178,7 @@ impl From<SharedStrBuilder> for SharedBytesBuilder {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl From<SharedStrBuilder> for super::SharedBytes {
     #[inline]
     fn from(value: SharedStrBuilder) -> Self {
@@ -183,6 +186,7 @@ impl From<SharedStrBuilder> for super::SharedBytes {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl From<SharedStrBuilder> for super::ByteData<'_> {
     #[inline]
     fn from(value: SharedStrBuilder) -> Self {
@@ -190,6 +194,7 @@ impl From<SharedStrBuilder> for super::ByteData<'_> {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl From<SharedStrBuilder> for super::StringData<'_> {
     #[inline]
     fn from(value: SharedStrBuilder) -> Self {
@@ -197,6 +202,7 @@ impl From<SharedStrBuilder> for super::StringData<'_> {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl TryFrom<SharedBytesBuilder> for SharedStrBuilder {
     type Error = core::str::Utf8Error;
     #[inline]
@@ -208,6 +214,7 @@ impl TryFrom<SharedBytesBuilder> for SharedStrBuilder {
     }
 }
 
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl From<super::StringData<'_>> for SharedStrBuilder {
     #[inline]
     fn from(value: super::StringData<'_>) -> Self {

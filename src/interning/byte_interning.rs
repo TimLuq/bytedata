@@ -26,7 +26,6 @@ pub trait ByteInterning<'a> {
     fn intern_always<'b>(&self, value: ByteData<'b>) -> ByteData<'a>;
     /// Interns the given string data using the rules for the interning implementation.
     #[inline]
-    #[allow(clippy::missing_errors_doc)]
     #[allow(single_use_lifetimes)]
     fn intern_always_str<'b>(&self, value: StringData<'b>) -> StringData<'a> {
         // SAFETY: The implementation of `intern_always` is expected to always return the same byte data.

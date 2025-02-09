@@ -149,29 +149,37 @@ mod char_indicies;
 pub use char_indicies::*;
 
 #[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 mod shared_bytes;
 #[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 pub use self::shared_bytes::*;
 
 #[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 mod shared_bytes_builder;
 #[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 pub use self::shared_bytes_builder::*;
 
 #[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 mod shared_str_builder;
 #[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 pub use self::shared_str_builder::*;
 
 mod stringdata;
 pub use self::stringdata::*;
 
 #[cfg(feature = "std")]
+#[cfg_attr(docsrs, doc(cfg(feature = "macros")))]
 mod std;
 
 #[cfg(feature = "macros")]
 mod macros;
 #[cfg(feature = "macros")]
+#[cfg_attr(docsrs, doc(cfg(feature = "macros")))]
 #[allow(unused_imports)]
 #[allow(unreachable_pub)]
 pub use self::macros::*;
@@ -200,21 +208,27 @@ mod external {
 }
 
 #[cfg(feature = "arbitrary_1")]
+#[cfg_attr(docsrs, doc(cfg(feature = "arbitrary_1")))]
 mod arbitrary_1;
 
 #[cfg(feature = "bytes_1")]
+#[cfg_attr(docsrs, doc(cfg(feature = "bytes_1")))]
 mod bytes_1;
 
 #[cfg(feature = "http-body_04")]
+#[cfg_attr(docsrs, doc(cfg(feature = "http-body_04")))]
 mod http_body_04;
 
 #[cfg(feature = "http-body_1")]
+#[cfg_attr(docsrs, doc(cfg(feature = "http-body_1")))]
 mod http_body_1;
 
 #[cfg(feature = "nom_7")]
+#[cfg_attr(docsrs, doc(cfg(feature = "nom_7")))]
 mod nom_7;
 
 #[cfg(feature = "serde_1")]
+#[cfg_attr(docsrs, doc(cfg(feature = "serde_1")))]
 mod serde_1;
 
 /// Checks if two byte slices are equal in a `const` context.

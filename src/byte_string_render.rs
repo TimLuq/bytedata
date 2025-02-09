@@ -143,7 +143,7 @@ impl core::fmt::UpperHex for ByteStringRender<'_> {
     }
 }
 
-/// Helper wrapper to render a byte slice as a bytestring similar to [`core::ascii::escape_default`].
+/// Helper wrapper to render a collection of byte slices as a singular bytestring similar to [`core::ascii::escape_default`].
 ///
 #[cfg_attr(feature = "alloc", doc = "```")]
 #[cfg_attr(not(feature = "alloc"), doc = "```ignore")]
