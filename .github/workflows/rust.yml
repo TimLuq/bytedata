@@ -25,6 +25,7 @@ jobs:
       - name: Fix docs environment
         shell: sh
         run: |
+          rm -f target/doc/.lock
           chmod -c -R +rX "target/doc" |
           while read line; do
               echo "::warning title=Invalid file permissions automatically fixed::$line"
@@ -38,6 +39,9 @@ jobs:
 
   # Deployment job
   deploy:
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
