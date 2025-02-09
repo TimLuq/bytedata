@@ -1,4 +1,4 @@
-use serde_1 as serde;
+use serde_1::{self as serde, de::DeserializeSeed};
 
 use crate::ByteData;
 
@@ -28,14 +28,37 @@ impl ByteData<'static> {
     where
         D: serde::de::Deserializer<'de>,
     {
-        #[cfg(feature = "alloc")]
-        {
-            deserializer.deserialize_byte_buf(StaticByteDataVisitor)
-        }
-        #[cfg(not(feature = "alloc"))]
-        {
-            deserializer.deserialize_byte(StaticByteDataVisitor)
-        }
+        StaticByteDataVisitor.deserialize(deserializer)
+    }
+
+    /// Deserialize a byte sequence to a shared/owned `Option<ByteData<'static>>` using `serde`.
+    ///
+    /// See also: [`ByteData::deserialize_static`]
+    #[inline]
+    #[allow(clippy::missing_errors_doc)]
+    #[cfg_attr(docsrs, doc(cfg(feature = "serde_1")))]
+    pub fn deserialize_static_opt<'de, D>(deserializer: D) -> Result<Option<Self>, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        deserializer.deserialize_option(super::OptVisit(StaticByteDataVisitor))
+    }
+
+    /// Deserialize a byte sequence to a shared/owned `Vec<ByteData<'static>>` using `serde`.
+    ///
+    /// See also: [`ByteData::deserialize_static`]
+    #[inline]
+    #[allow(clippy::missing_errors_doc)]
+    #[cfg(feature = "alloc")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "serde_1")))]
+    pub fn deserialize_static_vec<'de, D>(
+        deserializer: D,
+    ) -> Result<alloc::vec::Vec<Self>, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        deserializer.deserialize_seq(super::VecVisit(StaticByteDataVisitor))
     }
 }
 
@@ -47,7 +70,27 @@ impl serde::ser::Serialize for ByteData<'_> {
     }
 }
 
+#[derive(Clone, Copy)]
 struct StaticByteDataVisitor;
+
+impl<'de> serde::de::DeserializeSeed<'de> for StaticByteDataVisitor {
+    type Value = ByteData<'static>;
+
+    #[inline]
+    fn deserialize<D: serde::de::Deserializer<'de>>(
+        self,
+        deserializer: D,
+    ) -> Result<Self::Value, D::Error> {
+        #[cfg(feature = "alloc")]
+        {
+            deserializer.deserialize_byte_buf(self)
+        }
+        #[cfg(not(feature = "alloc"))]
+        {
+            deserializer.deserialize_byte(self)
+        }
+    }
+}
 
 impl serde::de::Visitor<'_> for StaticByteDataVisitor {
     type Value = ByteData<'static>;

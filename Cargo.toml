@@ -56,4 +56,4 @@ http-body_1 = ["dep:http-body_1", "dep:http_1", "bytes_1"]
 
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
+rustdoc-args = ["--cfg", "docsrs", "--generate-link-to-definition"]

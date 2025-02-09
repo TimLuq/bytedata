@@ -1,10 +1,9 @@
-use serde_1 as serde;
+use serde_1::{self as serde, de::DeserializeSeed};
 
 use crate::StringData;
 
 #[allow(clippy::multiple_inherent_impl)]
 impl StringData<'static> {
-    #[cfg_attr(docsrs, doc(cfg(feature = "serde_1")))]
     /// Deserialize a string to a shared/owned `StringData` using `serde`.
     ///
     /// The normal `Deserialize` implementation for `StringData` will deserialize to a borrowed `StringData`.
@@ -24,18 +23,42 @@ impl StringData<'static> {
     /// ```
     #[inline]
     #[allow(clippy::missing_errors_doc)]
+    #[cfg_attr(docsrs, doc(cfg(feature = "serde_1")))]
     pub fn deserialize_static<'de, D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::de::Deserializer<'de>,
     {
-        #[cfg(feature = "alloc")]
-        {
-            deserializer.deserialize_string(StaticStringDataVisitor)
-        }
-        #[cfg(not(feature = "alloc"))]
-        {
-            deserializer.deserialize_str(StaticStringDataVisitor)
-        }
+        StaticStringDataVisitor.deserialize(deserializer)
+    }
+
+    /// Deserialize a string to a shared/owned `Option<StringData<'static>>` using `serde`.
+    ///
+    /// See also: [`StringData::deserialize_static`]
+    #[inline]
+    #[allow(clippy::missing_errors_doc)]
+    #[cfg_attr(docsrs, doc(cfg(feature = "serde_1")))]
+    pub fn deserialize_static_opt<'de, D>(deserializer: D) -> Result<Option<Self>, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        deserializer.deserialize_option(super::OptVisit(StaticStringDataVisitor))
+    }
+
+    /// Deserialize a string to a shared/owned `Vec<StringData<'static>>` using `serde`.
+    ///
+    /// See also: [`StringData::deserialize_static`]
+    #[inline]
+    #[allow(clippy::missing_errors_doc)]
+    #[cfg(feature = "alloc")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "serde_1")))]
+    pub fn deserialize_static_vec<'de, D>(
+        deserializer: D,
+    ) -> Result<alloc::vec::Vec<Self>, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        deserializer.deserialize_seq(super::VecVisit(StaticStringDataVisitor))
     }
 }
 
@@ -47,6 +70,7 @@ impl serde::ser::Serialize for StringData<'_> {
     }
 }
 
+#[derive(Clone, Copy)]
 struct StaticStringDataVisitor;
 
 impl serde::de::Visitor<'_> for StaticStringDataVisitor {
@@ -83,6 +107,23 @@ impl serde::de::Visitor<'_> for StaticStringDataVisitor {
     #[inline]
     fn visit_string<E: serde::de::Error>(self, v: alloc::string::String) -> Result<Self::Value, E> {
         Ok(StringData::from_owned(v))
+    }
+}
+impl<'de> serde::de::DeserializeSeed<'de> for StaticStringDataVisitor {
+    type Value = StringData<'static>;
+
+    fn deserialize<D>(self, deserializer: D) -> Result<Self::Value, D::Error>
+    where
+        D: serde_1::Deserializer<'de>,
+    {
+        #[cfg(feature = "alloc")]
+        {
+            deserializer.deserialize_string(self)
+        }
+        #[cfg(not(feature = "alloc"))]
+        {
+            deserializer.deserialize_str(self)
+        }
     }
 }
 

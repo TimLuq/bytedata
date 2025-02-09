@@ -502,9 +502,9 @@ impl<'a> ByteQueue<'a> {
     }
 
     /// Replaces a range of bytes with another `ByteData`.
-    /// 
+    ///
     /// # Panics
-    /// 
+    ///
     /// Panics if the range is out of bounds.
     #[inline]
     pub fn replace_range<R: RangeBounds<usize>>(&mut self, range: R, replace_with: ByteData<'a>) {
