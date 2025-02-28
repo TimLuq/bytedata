@@ -401,6 +401,17 @@ impl<'a> ByteData<'a> {
         }
     }
 
+    /// Returns the borrowed slice of bytes if it is borrowed or static.
+    #[must_use]
+    #[inline]
+    pub const fn as_borrowed(&self) -> Option<&'a [u8]> {
+        if matches!(self.kind(), Kind::Slice) {
+            // SAFETY: Slice state has been checked.
+            return Some(unsafe { self.slice.as_slice() });
+        }
+        None
+    }
+
     /// Returns the length of the underlying byte slice.
     #[allow(clippy::missing_inline_in_public_items)]
     #[must_use]

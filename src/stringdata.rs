@@ -146,6 +146,17 @@ impl<'a> StringData<'a> {
         self.data.as_slice()
     }
 
+    /// Returns the underlying string if it is borrowed or static
+    #[inline]
+    #[must_use]
+    pub const fn as_borrowed(&self) -> Option<&'a str> {
+        match self.data.as_borrowed() {
+            // SAFETY: `StringData` is guaranteed to be valid UTF-8, unless the user has used `unsafe` methods.
+            Some(buf) => Some(unsafe { core::str::from_utf8_unchecked(buf) }),
+            None => None,
+        }
+    }
+
     /// Returns the underlying `str`.
     #[inline]
     #[must_use]
