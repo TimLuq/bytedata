@@ -567,7 +567,7 @@ impl From<ByteQueue<'_>> for alloc::vec::Vec<u8> {
     fn from(mut data: ByteQueue<'_>) -> Self {
         let len = data.chunk_len();
         if len == 0 {
-            return alloc::vec::Vec::new()
+            return alloc::vec::Vec::new();
         }
         if len == 1 {
             return data.pop_front().unwrap().into();

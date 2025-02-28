@@ -657,3 +657,94 @@ impl<'b> PartialEq<&'b [u8]> for crate::StringQueue<'_> {
         self.queue == **other
     }
 }
+
+impl<'b> PartialOrd<crate::StringQueue<'b>> for crate::StringQueue<'_> {
+    #[inline]
+    fn partial_cmp(&self, other: &crate::StringQueue<'b>) -> Option<core::cmp::Ordering> {
+        self.queue.partial_cmp(&other.queue)
+    }
+}
+
+impl<'b> PartialOrd<crate::ByteQueue<'b>> for crate::StringQueue<'_> {
+    #[inline]
+    fn partial_cmp(&self, other: &crate::ByteQueue<'b>) -> Option<core::cmp::Ordering> {
+        self.queue.partial_cmp(other)
+    }
+}
+impl<'b> PartialOrd<crate::StringQueue<'b>> for crate::ByteQueue<'_> {
+    #[inline]
+    fn partial_cmp(&self, other: &crate::StringQueue<'b>) -> Option<core::cmp::Ordering> {
+        self.partial_cmp(&other.queue)
+    }
+}
+
+impl<'b> PartialOrd<crate::StringData<'b>> for crate::StringQueue<'_> {
+    #[inline]
+    fn partial_cmp(&self, other: &crate::StringData<'b>) -> Option<core::cmp::Ordering> {
+        self.queue.partial_cmp(other.as_bytes())
+    }
+}
+impl<'b> PartialOrd<crate::StringQueue<'b>> for crate::StringData<'_> {
+    #[inline]
+    fn partial_cmp(&self, other: &crate::StringQueue<'b>) -> Option<core::cmp::Ordering> {
+        self.as_bytes().partial_cmp(&other.queue)
+    }
+}
+
+impl<'b> PartialOrd<crate::ByteData<'b>> for crate::StringQueue<'_> {
+    #[inline]
+    fn partial_cmp(&self, other: &crate::ByteData<'b>) -> Option<core::cmp::Ordering> {
+        self.queue.partial_cmp(other.as_slice())
+    }
+}
+impl<'b> PartialOrd<crate::StringQueue<'b>> for crate::ByteData<'_> {
+    #[inline]
+    fn partial_cmp(&self, other: &crate::StringQueue<'b>) -> Option<core::cmp::Ordering> {
+        self.as_slice().partial_cmp(&other.queue)
+    }
+}
+
+impl<'b> PartialOrd<&'b str> for crate::StringQueue<'_> {
+    #[inline]
+    fn partial_cmp(&self, other: &&'b str) -> Option<core::cmp::Ordering> {
+        self.queue.partial_cmp(other.as_bytes())
+    }
+}
+impl PartialOrd<str> for crate::StringQueue<'_> {
+    #[inline]
+    fn partial_cmp(&self, other: &str) -> Option<core::cmp::Ordering> {
+        self.queue.partial_cmp(other.as_bytes())
+    }
+}
+impl<'a> PartialOrd<crate::StringQueue<'a>> for str {
+    #[inline]
+    fn partial_cmp(&self, other: &crate::StringQueue<'a>) -> Option<core::cmp::Ordering> {
+        self.as_bytes().partial_cmp(&other.queue)
+    }
+}
+
+impl PartialOrd<[u8]> for crate::StringQueue<'_> {
+    #[inline]
+    fn partial_cmp(&self, other: &[u8]) -> Option<core::cmp::Ordering> {
+        self.queue.partial_cmp(other)
+    }
+}
+impl<'a> PartialOrd<crate::StringQueue<'a>> for [u8] {
+    #[inline]
+    fn partial_cmp(&self, other: &crate::StringQueue<'a>) -> Option<core::cmp::Ordering> {
+        self.partial_cmp(&other.queue)
+    }
+}
+impl<'b> PartialOrd<&'b [u8]> for crate::StringQueue<'_> {
+    #[inline]
+    fn partial_cmp(&self, other: &&'b [u8]) -> Option<core::cmp::Ordering> {
+        self.queue.partial_cmp(*other)
+    }
+}
+
+impl Ord for crate::StringQueue<'_> {
+    #[inline]
+    fn cmp(&self, other: &Self) -> core::cmp::Ordering {
+        self.queue.cmp(&other.queue)
+    }
+}
