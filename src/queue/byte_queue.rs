@@ -562,6 +562,27 @@ impl From<alloc::vec::Vec<u8>> for ByteQueue<'_> {
 #[cfg(feature = "alloc")]
 #[cfg_attr(docsrs, doc(cfg(feature = "queue")))]
 #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+impl From<ByteQueue<'_>> for alloc::vec::Vec<u8> {
+    #[inline]
+    fn from(mut data: ByteQueue<'_>) -> Self {
+        let len = data.chunk_len();
+        if len == 0 {
+            return alloc::vec::Vec::new()
+        }
+        if len == 1 {
+            return data.pop_front().unwrap().into();
+        }
+        let mut coll = alloc::vec::Vec::with_capacity(data.len());
+        for i in data {
+            coll.extend_from_slice(i.as_slice());
+        }
+        coll
+    }
+}
+
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "queue")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl From<alloc::string::String> for ByteQueue<'_> {
     #[inline]
     fn from(data: alloc::string::String) -> Self {
