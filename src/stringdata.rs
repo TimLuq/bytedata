@@ -496,6 +496,25 @@ impl<'a> From<StringData<'a>> for String {
 
 #[cfg(feature = "alloc")]
 #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+impl<'a> From<StringData<'a>> for Cow<'a, str> {
+    #[inline]
+    fn from(dat: StringData<'a>) -> Self {
+        let dat = Cow::<'a, [u8]>::from(dat.into_bytedata());
+        match dat {
+            Cow::Borrowed(borr) => {
+                // SAFETY: `StringData` is guaranteed to be valid UTF-8, unless the user has used `unsafe` methods.
+                Cow::Borrowed(unsafe { core::str::from_utf8_unchecked(borr) })
+            }
+            Cow::Owned(dat) => {
+                // SAFETY: `StringData` is guaranteed to be valid UTF-8, unless the user has used `unsafe` methods.
+                Cow::Owned(unsafe { String::from_utf8_unchecked(dat) })
+            }
+        }
+    }
+}
+
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl<'a> From<StringData<'a>> for alloc::vec::Vec<u8> {
     #[inline]
     fn from(dat: StringData<'a>) -> Self {

@@ -979,6 +979,19 @@ impl<'a> From<ByteData<'a>> for Vec<u8> {
 
 #[cfg(feature = "alloc")]
 #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+impl<'a> From<ByteData<'a>> for alloc::borrow::Cow<'a, [u8]> {
+    #[allow(clippy::missing_inline_in_public_items)]
+    fn from(dat: ByteData<'a>) -> Self {
+        if matches!(dat.kind(), Kind::Slice) {
+            // SAFETY: Slice state has been checked.
+            return alloc::borrow::Cow::Borrowed(unsafe { dat.slice }.as_slice())
+        }
+        alloc::borrow::Cow::Owned(dat.into())
+    }
+}
+
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl From<alloc::string::String> for ByteData<'_> {
     #[inline]
     fn from(dat: alloc::string::String) -> Self {
