@@ -1185,3 +1185,21 @@ impl Default for ByteData<'_> {
         ByteData::empty()
     }
 }
+
+#[cfg(feature = "alloc")]
+#[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+impl FromIterator<u8> for ByteData<'_> {
+    #[inline]
+    fn from_iter<T: IntoIterator<Item = u8>>(iter: T) -> Self {
+        let iter = iter.into_iter();
+        let siz = match iter.size_hint() {
+            (min, Some(siz)) => min + (siz.saturating_sub(min) >> 2_u8),
+            (siz, None) => siz,
+        };
+        let mut dat = crate::shared_bytes_builder::SharedBytesBuilder::with_capacity(siz);
+        for aa in iter {
+            dat.extend_from_slice(&[aa]);
+        }
+        Self::from(dat)
+    }
+}
