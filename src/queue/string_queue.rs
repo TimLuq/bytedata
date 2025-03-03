@@ -635,6 +635,12 @@ impl PartialEq<str> for crate::StringQueue<'_> {
 impl<'a> PartialEq<crate::StringQueue<'a>> for str {
     #[inline]
     fn eq(&self, other: &crate::StringQueue<'a>) -> bool {
+        self == other.queue
+    }
+}
+impl<'a> PartialEq<crate::StringQueue<'a>> for &'_ str {
+    #[inline]
+    fn eq(&self, other: &crate::StringQueue<'a>) -> bool {
         self == &other.queue
     }
 }
@@ -646,6 +652,12 @@ impl PartialEq<[u8]> for crate::StringQueue<'_> {
     }
 }
 impl<'a> PartialEq<crate::StringQueue<'a>> for [u8] {
+    #[inline]
+    fn eq(&self, other: &crate::StringQueue<'a>) -> bool {
+        self == other.queue
+    }
+}
+impl<'a> PartialEq<crate::StringQueue<'a>> for &'_ [u8] {
     #[inline]
     fn eq(&self, other: &crate::StringQueue<'a>) -> bool {
         self == &other.queue

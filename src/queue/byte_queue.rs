@@ -835,6 +835,13 @@ impl PartialEq<ByteQueue<'_>> for [u8] {
     }
 }
 
+impl<'a> PartialEq<ByteQueue<'a>> for &'_ [u8] {
+    #[inline]
+    fn eq(&self, other: &ByteQueue<'a>) -> bool {
+        other.eq(self)
+    }
+}
+
 impl<'b> PartialEq<&'b str> for ByteQueue<'_> {
     #[inline]
     fn eq(&self, other: &&'b str) -> bool {
@@ -852,6 +859,13 @@ impl PartialEq<str> for ByteQueue<'_> {
 impl PartialEq<ByteQueue<'_>> for str {
     #[inline]
     fn eq(&self, other: &ByteQueue<'_>) -> bool {
+        other.eq(self.as_bytes())
+    }
+}
+
+impl<'a> PartialEq<ByteQueue<'a>> for &'_ str {
+    #[inline]
+    fn eq(&self, other: &ByteQueue<'a>) -> bool {
         other.eq(self.as_bytes())
     }
 }
