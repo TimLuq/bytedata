@@ -30,7 +30,7 @@ impl<'a> StringData<'a> {
         }
     }
 
-    /// Creates a `StringData` from a slice of bytes.
+    /// Creates a `StringData` from a static str.
     #[inline]
     #[must_use]
     pub const fn from_static(dat: &'static str) -> Self {
@@ -39,13 +39,48 @@ impl<'a> StringData<'a> {
         }
     }
 
-    /// Creates a `StringData` from a borrowed slice of bytes.
+    /// Creates a `StringData` from a borrowed str.
     #[inline]
     #[must_use]
     pub const fn from_borrowed(dat: &'a str) -> Self {
         StringData {
             data: ByteData::from_borrowed(dat.as_bytes()),
         }
+    }
+
+    #[cfg(feature = "alloc")]
+    /// Creates a `StringData` from a slice of borrowed `str`s.
+    #[inline]
+    #[must_use]
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    pub fn from_concat(dat: &[&'a str]) -> Self {
+        fn from_concat_inner<'a>(dat: &[&'a str]) -> StringData<'a> {
+            let len = dat.iter().map(|x| x.len()).sum();
+            if len <= crate::ByteChunk::LEN {
+                let mut buf = [0_u8; crate::ByteChunk::LEN];
+                let mut at = 0;
+                for x in dat {
+                    let by = x.as_bytes();
+                    buf[at..at + by.len()].copy_from_slice(by);
+                    at += by.len();
+                }
+                let data = crate::ByteData::from_chunk_slice(&buf[..at]);
+                // SAFETY: `ByteData` is guaranteed to be valid UTF-8, if the input is valid UTF-8.
+                return unsafe { StringData::from_bytedata_unchecked(data) };
+            }
+            let mut buf = crate::SharedStrBuilder::with_capacity(len);
+            for x in dat {
+                buf.push_str(x);
+            }
+            buf.build_str()
+        }
+        if dat.is_empty() {
+            return Self::empty();
+        }
+        if dat.len() == 1 {
+            return Self::from_borrowed(dat[0]);
+        }
+        from_concat_inner(dat)
     }
 
     #[cfg(feature = "alloc")]

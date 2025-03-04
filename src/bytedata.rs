@@ -341,6 +341,38 @@ impl<'a> ByteData<'a> {
     }
 
     #[cfg(feature = "alloc")]
+    /// Creates a `ByteData` from a slice of borrowed byte slices.
+    #[inline]
+    #[must_use]
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    pub fn from_concat(dat: &[&'a [u8]]) -> Self {
+        fn from_concat_inner<'a>(dat: &[&'a [u8]]) -> ByteData<'a> {
+            let len = dat.iter().map(|x| x.len()).sum();
+            if len <= crate::ByteChunk::LEN {
+                let mut buf = [0_u8; crate::ByteChunk::LEN];
+                let mut at = 0;
+                for x in dat {
+                    buf[at..at + x.len()].copy_from_slice(x);
+                    at += x.len();
+                }
+                return ByteData::from_chunk_slice(&buf[..at]);
+            }
+            let mut buf = crate::SharedBytesBuilder::with_capacity(len);
+            for x in dat {
+                buf.extend_from_slice(x);
+            }
+            ByteData::from_shared(buf.build())
+        }
+        if dat.is_empty() {
+            return Self::empty();
+        }
+        if dat.len() == 1 {
+            return Self::from_borrowed(dat[0]);
+        }
+        from_concat_inner(dat)
+    }
+
+    #[cfg(feature = "alloc")]
     /// Creates a `ByteData` from an externally kept byte sequence.
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     #[inline]
