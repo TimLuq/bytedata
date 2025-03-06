@@ -401,9 +401,6 @@ impl SharedBytesBuilder {
             return &mut [];
         }
         let data_off = SharedBytesMeta::compute_start_offset(self.align);
-        if self.off == data_off {
-            return &mut [];
-        }
         // SAFETY: `data_off` is the start offset of the data.
         let dat = unsafe { self.dat.add(data_off as usize) };
         let len = (self.off - data_off) as usize;
