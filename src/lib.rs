@@ -305,6 +305,22 @@ pub const fn const_slice(data: &'_ [u8], range: core::ops::Range<usize>) -> Opti
     unsafe { Some(core::slice::from_raw_parts(data, end - start)) }
 }
 
+/// Helper function for slicing slices in a `const` context.
+/// 
+/// ## Safety
+/// 
+/// The caller must ensure that the range is within bounds.
+#[must_use]
+#[inline]
+pub const unsafe fn const_slice_unchecked(data: &'_ [u8], range: core::ops::Range<usize>) -> &'_ [u8] {
+    let start = range.start;
+    let end = range.end;
+    // SAFETY: the range is within bounds
+    let data = unsafe { data.as_ptr().add(start) };
+    // SAFETY: the range is within bounds
+    unsafe { core::slice::from_raw_parts(data, end - start) }
+}
+
 /// The different states that can occur when slicing a `str`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(clippy::exhaustive_enums)]
@@ -392,6 +408,25 @@ pub const fn const_slice_str(data: &'_ str, range: core::ops::Range<usize>) -> S
     let data = unsafe { core::slice::from_raw_parts(data, end - start) };
     // SAFETY: the slice is valid UTF-8
     unsafe { StrSliceResult::Success(core::str::from_utf8_unchecked(data)) }
+}
+
+/// Helper function for slicing `str`s in a `const` context.
+/// 
+/// ## Safety
+/// 
+/// The caller must ensure that the range is within bounds and that the resulting slice is valid UTF-8 by splitting on a UTF-8 char boundary.
+#[inline]
+#[must_use]
+pub const unsafe fn const_slice_str_unchecked(data: &str, range: core::ops::Range<usize>) -> &str {
+    let data = data.as_bytes();
+    let start = range.start;
+    let end = range.end;
+    // SAFETY: the range is within bounds
+    let data = unsafe { data.as_ptr().add(start) };
+    // SAFETY: the range is within bounds
+    let data = unsafe { core::slice::from_raw_parts(data, end - start) };
+    // SAFETY: the slice is valid UTF-8
+    unsafe { core::str::from_utf8_unchecked(data) }
 }
 
 /// Simple helper function to return a constant string or a default string.
