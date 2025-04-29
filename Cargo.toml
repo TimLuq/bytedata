@@ -1,6 +1,6 @@
 [package]
 name = "bytedata"
-version = "0.1.14"
+version = "0.1.15"
 edition = "2021"
 rust-version = "1.75"
 description = "Representation of a byte slice that is either static, borrowed, or shared."

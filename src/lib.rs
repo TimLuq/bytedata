@@ -578,20 +578,20 @@ pub const fn const_utf8_char_next(data: &[u8]) -> (u32, u32) {
         return (first as u32, 1);
     } else if first & 0b1110_0000 == 0b1100_0000 {
         value = (first & 0b0001_1111) as u32;
-        2
+        1
     } else if first & 0b1111_0000 == 0b1110_0000 {
         value = (first & 0b0000_1111) as u32;
-        3
+        2
     } else if first & 0b1111_1000 == 0b1111_0000 {
         value = (first & 0b0000_0111) as u32;
-        4
+        3
     } else {
         return (0, 0);
     };
     if data.len() < len {
         return (0, 0);
     }
-    let mut i = 1;
+    let mut i = 0;
     while i < len {
         let byte = data[i];
         if byte & 0b1100_0000 != 0b1000_0000 {
@@ -601,7 +601,7 @@ pub const fn const_utf8_char_next(data: &[u8]) -> (u32, u32) {
         i += 1;
     }
     #[allow(clippy::cast_possible_truncation)]
-    (value, len as u32)
+    (value, 1 + len as u32)
 }
 
 #[cfg(test)]
