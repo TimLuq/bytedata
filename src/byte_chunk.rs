@@ -1,7 +1,7 @@
 use core::{ops::RangeBounds, slice::SliceIndex};
 
 /// A chunk of bytes that is 14 bytes or less.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Eq)]
 pub struct ByteChunk {
     /// The length of the chunk.
     pub(crate) len: u8,
@@ -73,6 +73,20 @@ impl ByteChunk {
         chunk
     }
 
+    /// Attempts to add a byte to this chunk.
+    /// Returns `true` if the byte was added, `false` if the chunk is full.
+    #[inline]
+    #[must_use]
+    pub fn push(&mut self, byte: u8) -> bool {
+        #[expect(clippy::cast_possible_truncation)]
+        if self.len >= Self::LEN as u8 {
+            return false;
+        }
+        self.data[self.len as usize] = byte;
+        self.len += 1;
+        true
+    }
+
     /// Get the bytes of the `ByteChunk` as a slice.
     #[inline]
     #[must_use]
@@ -82,7 +96,7 @@ impl ByteChunk {
             return &[];
         }
         // SAFETY: `len` is within bounds.
-        unsafe { core::slice::from_raw_parts(self.data.as_ptr(), len) }
+        unsafe { core::slice::from_raw_parts(self.data.as_ptr(), self.len as usize) }
     }
 
     /// Get the number bytes of the `ByteChunk`.
@@ -180,6 +194,23 @@ impl ByteChunk {
             core::ops::Bound::Unbounded => self.len as usize,
         };
         Self::slice(self, start, end);
+    }
+}
+
+impl<T: core::ops::Deref<Target = [u8]>> PartialEq<T> for ByteChunk {
+    #[inline]
+    fn eq(&self, other: &T) -> bool {
+        self.len as usize == other.len() && &self.data[..self.len as usize] == T::deref(other)
+    }
+}
+
+impl core::ops::Deref for ByteChunk {
+    type Target = [u8];
+
+    #[inline]
+    fn deref(&self) -> &[u8] {
+        // SAFETY: `len` is within bounds if it hasn't been modified.
+        unsafe { core::slice::from_raw_parts(self.data.as_ptr(), self.len as usize) }
     }
 }
 
