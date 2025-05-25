@@ -2,7 +2,6 @@ use crate::{SharedBytes, SharedBytesMeta};
 
 /// A builder for `SharedBytes`.
 #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
-#[allow(missing_debug_implementations)]
 pub struct SharedBytesBuilder {
     /// The total capacity of the buffer.
     pub(crate) len: u32,
@@ -12,6 +11,21 @@ pub struct SharedBytesBuilder {
     pub(crate) dat: *mut u8,
     /// The alignment of the buffer.
     pub(crate) align: usize,
+}
+
+impl core::fmt::Debug for SharedBytesBuilder {
+    #[inline]
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("SharedBytesBuilder")
+            .field(
+                "data",
+                &crate::byte_string_render::ByteStringRender::from_slice(self.as_slice()),
+            )
+            .field("len", &self.len())
+            .field("capacity", &self.capacity())
+            .field("align", &self.align)
+            .finish()
+    }
 }
 
 // SAFETY: `SharedBytesBuilder` is `Send` and `Sync` because it's safe to share the heap data across threads.
@@ -538,6 +552,30 @@ impl From<SharedBytesBuilder> for crate::ByteData<'_> {
     #[inline]
     fn from(value: SharedBytesBuilder) -> Self {
         value.build().into()
+    }
+}
+
+impl From<&str> for SharedBytesBuilder {
+    #[inline]
+    fn from(value: &str) -> Self {
+        if value.is_empty() {
+            return SharedBytesBuilder::new();
+        }
+        let mut builder = SharedBytesBuilder::with_capacity(value.len());
+        builder.extend_from_slice(value.as_bytes());
+        builder
+    }
+}
+
+impl From<&[u8]> for SharedBytesBuilder {
+    #[inline]
+    fn from(value: &[u8]) -> Self {
+        if value.is_empty() {
+            return SharedBytesBuilder::new();
+        }
+        let mut builder = SharedBytesBuilder::with_capacity(value.len());
+        builder.extend_from_slice(value);
+        builder
     }
 }
 

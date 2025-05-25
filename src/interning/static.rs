@@ -84,7 +84,6 @@ impl Drop for StaticInterning {
 
 impl Default for StaticInterning {
     #[inline]
-    #[must_use]
     fn default() -> Self {
         Self::new(128)
     }

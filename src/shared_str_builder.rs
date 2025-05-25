@@ -155,7 +155,6 @@ impl core::fmt::Display for SharedStrBuilder {
 
 impl Default for SharedStrBuilder {
     #[inline]
-    #[must_use]
     fn default() -> Self {
         Self::new()
     }

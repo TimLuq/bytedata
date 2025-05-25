@@ -231,6 +231,10 @@ mod nom_7;
 #[cfg_attr(docsrs, doc(cfg(feature = "serde_1")))]
 mod serde_1;
 
+#[cfg(feature = "postgres-types_02")]
+#[cfg_attr(docsrs, doc(cfg(feature = "postgres-types_02")))]
+mod postgres_02;
+
 /// Checks if two byte slices are equal in a `const` context.
 /// This is however not a *constant time* equality check, as it will return `false` as early as possible.
 #[must_use]
@@ -306,13 +310,16 @@ pub const fn const_slice(data: &'_ [u8], range: core::ops::Range<usize>) -> Opti
 }
 
 /// Helper function for slicing slices in a `const` context.
-/// 
+///
 /// ## Safety
-/// 
+///
 /// The caller must ensure that the range is within bounds.
 #[must_use]
 #[inline]
-pub const unsafe fn const_slice_unchecked(data: &'_ [u8], range: core::ops::Range<usize>) -> &'_ [u8] {
+pub const unsafe fn const_slice_unchecked(
+    data: &'_ [u8],
+    range: core::ops::Range<usize>,
+) -> &'_ [u8] {
     let start = range.start;
     let end = range.end;
     // SAFETY: the range is within bounds
@@ -411,9 +418,9 @@ pub const fn const_slice_str(data: &'_ str, range: core::ops::Range<usize>) -> S
 }
 
 /// Helper function for slicing `str`s in a `const` context.
-/// 
+///
 /// ## Safety
-/// 
+///
 /// The caller must ensure that the range is within bounds and that the resulting slice is valid UTF-8 by splitting on a UTF-8 char boundary.
 #[inline]
 #[must_use]
