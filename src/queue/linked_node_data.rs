@@ -40,10 +40,10 @@ impl<'a> LinkedNodeData<'a> {
         clippy::integer_division_remainder_used
     )]
     pub(super) fn push_back(&mut self, data: ByteData<'a>) -> Result<(), ByteData<'a>> {
-        if self.len >= self.data.len() as u8 {
+        if self.len >= NODE_SIZE as u8 {
             return Err(data);
         }
-        self.data[(self.beg as usize + self.len as usize) % self.data.len()].write(data);
+        self.data[(self.beg as usize + self.len as usize) % NODE_SIZE].write(data);
         self.len += 1;
         Ok(())
     }
@@ -53,10 +53,10 @@ impl<'a> LinkedNodeData<'a> {
         clippy::integer_division_remainder_used
     )]
     pub(super) fn push_front(&mut self, data: ByteData<'a>) -> Result<(), ByteData<'a>> {
-        if self.len >= self.data.len() as u8 {
+        if self.len >= NODE_SIZE as u8 {
             return Err(data);
         }
-        let i = (self.beg as usize + (self.data.len() - 1)) % self.data.len();
+        let i = (self.beg as usize + (NODE_SIZE - 1)) % NODE_SIZE;
         self.data[i].write(data);
         self.beg = i as u8;
         self.len += 1;
@@ -72,7 +72,7 @@ impl<'a> LinkedNodeData<'a> {
             return None;
         }
         self.len -= 1;
-        let i = (self.beg as usize + self.len as usize) % self.data.len();
+        let i = (self.beg as usize + self.len as usize) % NODE_SIZE;
         // SAFETY: `i` is a valid index and is already marked as consumed so we can steal it
         Some(unsafe { self.data[i].as_mut_ptr().read() })
     }
@@ -86,7 +86,7 @@ impl<'a> LinkedNodeData<'a> {
             return None;
         }
         let i = self.beg as usize;
-        self.beg = (self.beg + 1) % self.data.len() as u8;
+        self.beg = (self.beg + 1) % NODE_SIZE as u8;
         self.len -= 1;
         // SAFETY: `i` is a valid index and is already marked as consumed so we can steal it
         Some(unsafe { self.data[i].as_mut_ptr().read() })
@@ -105,9 +105,25 @@ impl<'a> LinkedNodeData<'a> {
         if self.len == 0 {
             return None;
         }
-        let i = (self.beg as usize + self.len as usize - 1) % self.data.len();
+        let i = (self.beg as usize + self.len as usize - 1) % NODE_SIZE;
         // SAFETY: `i` is a valid index so we can safely ref it
         Some(unsafe { self.data[i].assume_init_ref() })
+    }
+
+    #[cfg(feature = "alloc")]
+    /// Ensures that all chunks in the queue are shared so they can be used for any lifetime.
+    pub(super) fn make_shared(&mut self) {
+        let mut beg = self.beg as usize;
+
+        #[allow(clippy::integer_division_remainder_used)]
+        for _ in 0..self.len {
+            // SAFETY: `b` is a valid index so we must drop it
+            let ptr = unsafe {
+                &mut *self.data[beg].as_mut_ptr()
+            };
+            ptr.make_shared();
+            beg = (beg + 1) % NODE_SIZE;
+        }
     }
 }
 
@@ -121,7 +137,7 @@ impl Drop for LinkedNodeData<'_> {
             unsafe {
                 self.data[beg].as_mut_ptr().drop_in_place();
             };
-            beg = (beg + 1) % self.data.len();
+            beg = (beg + 1) % NODE_SIZE;
         }
     }
 }

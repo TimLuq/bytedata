@@ -422,6 +422,25 @@ impl<'a> ByteQueue<'a> {
         OwnedByteIter::new(self)
     }
 
+    #[cfg(feature = "alloc")]
+    /// Ensures that all chunks in the queue are shared so they can be used for any lifetime.
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    #[inline]
+    #[must_use]
+    pub fn into_shared<'o>(self) -> ByteQueue<'o> {
+        let mut this = self;
+        this.queue.make_shared();
+        unsafe { core::mem::transmute::<ByteQueue<'a>, ByteQueue<'o>>(this) }
+    }
+
+    #[cfg(feature = "alloc")]
+    /// Ensures that all chunks in the queue are shared so they can be used for any lifetime.
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    #[inline]
+    pub fn make_shared(&mut self) {
+        self.queue.make_shared();
+    }
+
     /// Adds another `ByteQueue`'s chunks to this queue.
     #[inline]
     #[cfg(not(feature = "alloc"))]

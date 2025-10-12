@@ -704,33 +704,37 @@ impl<'a> ByteData<'a> {
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     #[inline]
     #[must_use]
-    pub fn into_shared<'s>(mut self) -> ByteData<'s> {
+    pub fn into_shared<'s>(self) -> ByteData<'s> {
+        let mut this = self;
+        this.make_shared();
+        unsafe {
+            core::mem::transmute::<ByteData<'a>, ByteData<'s>>(this)
+        }
+    }
+
+    #[cfg(feature = "alloc")]
+    /// Transform any borrowed data into shared data. This is useful when you wish to change the lifetime of the data.
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    #[inline]
+    pub(crate) fn make_shared<'s>(&mut self) {
         match self.kind() {
-            // SAFETY: these states are owned, so they can be transformed to any lifetime.
-            Kind::Chunk | Kind::Shared | Kind::External => unsafe {
-                core::mem::transmute::<ByteData<'a>, ByteData<'s>>(self)
-            },
+            Kind::Chunk | Kind::Shared | Kind::External => return,
             Kind::Slice => {
                 // SAFETY: Slice state has been checked.
                 let aa = unsafe { &self.slice };
-                if aa.is_static() {
-                    // SAFETY: as the data is static, it can be transformed to any lifetime.
-                    unsafe { core::mem::transmute::<ByteData<'a>, ByteData<'s>>(self) }
-                } else if aa.len() <= crate::byte_chunk::ByteChunk::LEN {
+                if aa.len() <= crate::byte_chunk::ByteChunk::LEN {
                     let ret = crate::byte_chunk::ByteChunk::from_slice(aa.as_slice());
-                    core::mem::forget(self);
-                    ByteData {
-                        chunk: DataKind {
-                            kind: KIND_CHUNK_MASK,
-                            data: ret,
-                        },
-                    }
-                } else {
-                    let ret = SharedBytes::from_slice(aa.as_slice());
-                    self.shared = core::mem::ManuallyDrop::new(ret);
-                    // SAFETY: the Shared state is owned, so it can be transformed to any lifetime.
-                    unsafe { core::mem::transmute::<ByteData<'a>, ByteData<'s>>(self) }
+                    self.chunk = DataKind {
+                        kind: KIND_CHUNK_MASK,
+                        data: ret,
+                    };
+                    return;
                 }
+                if aa.is_static() {
+                    return;
+                }
+                let ret = SharedBytes::from_slice(aa.as_slice());
+                self.shared = core::mem::ManuallyDrop::new(ret);
             }
         }
     }

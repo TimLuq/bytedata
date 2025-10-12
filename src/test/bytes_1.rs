@@ -6,7 +6,7 @@ fn test_bytedata_bytes_1_static() {
     #[cfg(not(feature = "bytes_1_safe"))]
     assert!(matches!(
         unsafe { s0.chunk.kind() },
-        crate::bytedata::Kind::Slice
+        crate::bytedata::Kind::Slice | crate::bytedata::Kind::Chunk
     ));
     #[cfg(feature = "bytes_1_safe")]
     assert!(matches!(

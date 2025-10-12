@@ -53,6 +53,24 @@ impl<'a> StringQueue<'a> {
         unsafe { core::mem::transmute(self) }
     }
 
+    #[cfg(feature = "alloc")]
+    /// Ensures that all chunks in the queue are shared so they can be used for any lifetime.
+    #[inline]
+    #[must_use]
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    pub fn into_shared<'o>(self) -> StringQueue<'o> {
+        // SAFETY: `StringQueue` is a transparent wrapper around `ByteQueue`.
+        unsafe { core::mem::transmute::<ByteQueue<'o>, StringQueue<'o>>(self.into_bytequeue().into_shared()) }
+    }
+
+    #[cfg(feature = "alloc")]
+    /// Ensures that all chunks in the queue are shared so they can be used for any lifetime.
+    #[inline]
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    pub fn make_shared(&mut self) {
+        self.queue.make_shared();
+    }
+
     /// Checks if the queue is full. When the feature `alloc` is enabled, this will always return `false`.
     #[inline]
     #[must_use]
@@ -282,6 +300,12 @@ impl<'a> StringQueue<'a> {
         max: usize,
     ) -> super::SplitOn<'a, 'b> {
         super::SplitOn::new(self.as_bytequeue(), needle, max)
+    }
+
+    /// Append another `StringQueue` to the end of this one.
+    #[inline]
+    pub fn append(&mut self, other: Self) {
+        self.queue.append(other.into_bytequeue());
     }
 
     /// Split the queue on a certain byte position.

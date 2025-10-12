@@ -302,6 +302,20 @@ impl<'a> LinkedRoot<'a> {
         other.last = core::ptr::null_mut();
         other.count = 0;
     }
+
+    /// Ensures that all chunks in the queue are shared so they can be used for any lifetime.
+    #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
+    pub(super) fn make_shared(&mut self) {
+        if !self.chamber.is_empty() {
+            self.chamber.make_shared();
+        }
+        let mut node = self.first;
+        // SAFETY: if the pointer is non-null, it is a valid pointer to a `LinkedNodeLeaf`.
+        while let Some(n) = unsafe { node.as_mut() } {
+            n.data.make_shared();
+            node = n.next;
+        }
+    }
 }
 
 impl<'a> LinkedRoot<'a> {
