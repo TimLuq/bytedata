@@ -38,7 +38,6 @@ impl<'a: 'b, 'b> LinkedIter<'a, 'b> {
         while let Some(aa) = unsafe { node.next.as_ref() } {
             len += aa.data.len as usize;
             node = aa;
-            continue;
         }
         if self.chamber.is_some() {
             len += 1;

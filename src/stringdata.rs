@@ -348,7 +348,7 @@ impl<'a> StringData<'a> {
     #[must_use]
     pub fn take_while<F: FnMut(char) -> bool>(&mut self, mut fun: F) -> Self {
         let Some(position) = self.as_str().find(|ch| !fun(ch)) else {
-            return core::mem::replace(self, StringData::empty());
+            return core::mem::replace(self, const { StringData::empty() });
         };
         if position == 0 {
             return StringData::empty();
@@ -365,7 +365,7 @@ impl<'a> StringData<'a> {
     #[must_use]
     pub fn take_line(&mut self) -> Self {
         let Some(position) = self.as_str().find('\n') else {
-            return core::mem::replace(self, Self::empty());
+            return core::mem::replace(self, const { Self::empty() });
         };
         let av = self.sliced(0..position);
         self.make_sliced(position..);

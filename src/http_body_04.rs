@@ -17,7 +17,7 @@ impl http_body::Body for ByteData<'_> {
         mut self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        let this = core::ops::DerefMut::deref_mut(&mut self);
+        let this = &mut *self;
         if this.is_empty() {
             Poll::Ready(None)
         } else if this.len() > 0xFFFF {
@@ -25,7 +25,7 @@ impl http_body::Body for ByteData<'_> {
             this.make_sliced(0xFFFF..);
             Poll::Ready(Some(Ok(res)))
         } else {
-            let res = core::mem::replace(this, ByteData::empty());
+            let res = core::mem::replace(this, const { ByteData::empty() });
             Poll::Ready(Some(Ok(res)))
         }
     }
@@ -59,7 +59,7 @@ impl http_body::Body for crate::SharedBytes {
         mut self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        let this = core::ops::DerefMut::deref_mut(&mut self);
+        let this = &mut *self;
         if this.is_empty() {
             Poll::Ready(None)
         } else if this.len() > 0xFFFF {
@@ -67,7 +67,7 @@ impl http_body::Body for crate::SharedBytes {
             this.make_sliced(0xFFFF, this.len() - 0xFFFF);
             Poll::Ready(Some(Ok(res)))
         } else {
-            let res = core::mem::replace(this, Self::empty());
+            let res = core::mem::replace(this, const { Self::empty() });
             Poll::Ready(Some(Ok(res)))
         }
     }

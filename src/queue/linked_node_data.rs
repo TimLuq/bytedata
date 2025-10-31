@@ -118,9 +118,7 @@ impl<'a> LinkedNodeData<'a> {
         #[allow(clippy::integer_division_remainder_used)]
         for _ in 0..self.len {
             // SAFETY: `b` is a valid index so we must drop it
-            let ptr = unsafe {
-                &mut *self.data[beg].as_mut_ptr()
-            };
+            let ptr = unsafe { &mut *self.data[beg].as_mut_ptr() };
             ptr.make_shared();
             beg = (beg + 1) % NODE_SIZE;
         }

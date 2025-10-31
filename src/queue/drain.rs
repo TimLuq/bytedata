@@ -20,14 +20,26 @@ impl<'a, 'b> DrainBytes<'a, 'b> {
     }
 }
 
-#[allow(single_use_lifetimes, clippy::needless_lifetimes)]
+#[allow(
+    single_use_lifetimes,
+    clippy::needless_lifetimes,
+    clippy::elidable_lifetime_names
+)]
 // SAFETY: `DrainBytes` is `Send` and `Sync` because points to data valid for the lifetimes
 unsafe impl<'a, 'b> Send for DrainBytes<'a, 'b> {}
-#[allow(single_use_lifetimes, clippy::needless_lifetimes)]
+#[allow(
+    single_use_lifetimes,
+    clippy::needless_lifetimes,
+    clippy::elidable_lifetime_names
+)]
 // SAFETY: `DrainBytes` is `Send` and `Sync` because points to data valid for the lifetimes
 unsafe impl<'a, 'b> Sync for DrainBytes<'a, 'b> {}
 
-#[allow(single_use_lifetimes, clippy::needless_lifetimes)]
+#[allow(
+    single_use_lifetimes,
+    clippy::needless_lifetimes,
+    clippy::elidable_lifetime_names
+)]
 impl<'a, 'b> Drop for DrainBytes<'a, 'b> {
     #[inline]
     fn drop(&mut self) {
@@ -41,7 +53,11 @@ impl<'a, 'b> Drop for DrainBytes<'a, 'b> {
     }
 }
 
-#[allow(single_use_lifetimes, clippy::needless_lifetimes)]
+#[allow(
+    single_use_lifetimes,
+    clippy::needless_lifetimes,
+    clippy::elidable_lifetime_names
+)]
 impl<'a, 'b> Iterator for DrainBytes<'a, 'b> {
     type Item = u8;
 
@@ -73,7 +89,11 @@ impl<'a, 'b> Iterator for DrainBytes<'a, 'b> {
     }
 }
 
-#[allow(single_use_lifetimes, clippy::needless_lifetimes)]
+#[allow(
+    single_use_lifetimes,
+    clippy::needless_lifetimes,
+    clippy::elidable_lifetime_names
+)]
 impl<'a, 'b> ExactSizeIterator for DrainBytes<'a, 'b> {
     #[inline]
     fn len(&self) -> usize {
@@ -109,14 +129,26 @@ impl<'a, 'b> DrainChars<'a, 'b> {
     }
 }
 
-#[allow(single_use_lifetimes, clippy::needless_lifetimes)]
+#[allow(
+    single_use_lifetimes,
+    clippy::needless_lifetimes,
+    clippy::elidable_lifetime_names
+)]
 // SAFETY: `DrainChars` is `Send` and `Sync` because points to data valid for the lifetimes
 unsafe impl<'a, 'b> Send for DrainChars<'a, 'b> {}
-#[allow(single_use_lifetimes, clippy::needless_lifetimes)]
+#[allow(
+    single_use_lifetimes,
+    clippy::needless_lifetimes,
+    clippy::elidable_lifetime_names
+)]
 // SAFETY: `DrainChars` is `Send` and `Sync` because points to data valid for the lifetimes
 unsafe impl<'a, 'b> Sync for DrainChars<'a, 'b> {}
 
-#[allow(single_use_lifetimes, clippy::needless_lifetimes)]
+#[allow(
+    single_use_lifetimes,
+    clippy::needless_lifetimes,
+    clippy::elidable_lifetime_names
+)]
 impl<'a, 'b> Drop for DrainChars<'a, 'b> {
     #[inline]
     fn drop(&mut self) {
@@ -130,7 +162,11 @@ impl<'a, 'b> Drop for DrainChars<'a, 'b> {
     }
 }
 
-#[allow(single_use_lifetimes, clippy::needless_lifetimes)]
+#[allow(
+    single_use_lifetimes,
+    clippy::needless_lifetimes,
+    clippy::elidable_lifetime_names
+)]
 impl<'a, 'b> Iterator for DrainChars<'a, 'b> {
     type Item = char;
 

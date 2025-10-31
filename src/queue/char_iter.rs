@@ -19,7 +19,11 @@ impl<'a, 'b> CharIter<'a, 'b> {
     }
 }
 
-#[allow(single_use_lifetimes, clippy::needless_lifetimes)]
+#[allow(
+    single_use_lifetimes,
+    clippy::needless_lifetimes,
+    clippy::elidable_lifetime_names
+)]
 impl<'a, 'b> Iterator for CharIter<'a, 'b> {
     type Item = char;
 
@@ -73,7 +77,11 @@ impl<'a, 'b> CharIndecies<'a, 'b> {
     }
 }
 
-#[allow(single_use_lifetimes, clippy::needless_lifetimes)]
+#[allow(
+    single_use_lifetimes,
+    clippy::needless_lifetimes,
+    clippy::elidable_lifetime_names
+)]
 impl<'a, 'b> Iterator for CharIndecies<'a, 'b> {
     type Item = (usize, char);
 

@@ -134,7 +134,11 @@ impl super::ByteInterning<'static> for StaticInterning {
         Ok(self.intern_always(value))
     }
 
-    #[allow(single_use_lifetimes, clippy::needless_lifetimes, clippy::elidable_lifetime_names)]
+    #[allow(
+        single_use_lifetimes,
+        clippy::needless_lifetimes,
+        clippy::elidable_lifetime_names
+    )]
     #[inline]
     fn intern_always<'b>(&self, value: ByteData<'b>) -> ByteData<'static> {
         let ptr = self.map.load(core::sync::atomic::Ordering::Acquire);

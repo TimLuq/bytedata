@@ -13,6 +13,7 @@ pub struct SharedBytesBuilder {
     pub(crate) align: usize,
 }
 
+#[allow(clippy::missing_fields_in_debug)]
 impl core::fmt::Debug for SharedBytesBuilder {
     #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -559,9 +560,9 @@ impl From<&str> for SharedBytesBuilder {
     #[inline]
     fn from(value: &str) -> Self {
         if value.is_empty() {
-            return SharedBytesBuilder::new();
+            return const { Self::new() };
         }
-        let mut builder = SharedBytesBuilder::with_capacity(value.len());
+        let mut builder = Self::with_capacity(value.len());
         builder.extend_from_slice(value.as_bytes());
         builder
     }
@@ -571,9 +572,9 @@ impl From<&[u8]> for SharedBytesBuilder {
     #[inline]
     fn from(value: &[u8]) -> Self {
         if value.is_empty() {
-            return SharedBytesBuilder::new();
+            return const { Self::new() };
         }
-        let mut builder = SharedBytesBuilder::with_capacity(value.len());
+        let mut builder = Self::with_capacity(value.len());
         builder.extend_from_slice(value);
         builder
     }

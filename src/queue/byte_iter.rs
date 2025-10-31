@@ -72,7 +72,11 @@ impl<'a, 'b> ByteIter<'a, 'b> {
     }
 }
 
-#[allow(single_use_lifetimes, clippy::needless_lifetimes)]
+#[allow(
+    single_use_lifetimes,
+    clippy::needless_lifetimes,
+    clippy::elidable_lifetime_names
+)]
 impl<'a, 'b> Iterator for ByteIter<'a, 'b> {
     type Item = u8;
 
@@ -126,7 +130,11 @@ impl<'a, 'b> Iterator for ByteIter<'a, 'b> {
     }
 }
 
-#[allow(single_use_lifetimes, clippy::needless_lifetimes)]
+#[allow(
+    single_use_lifetimes,
+    clippy::needless_lifetimes,
+    clippy::elidable_lifetime_names
+)]
 impl<'a, 'b> core::iter::ExactSizeIterator for ByteIter<'a, 'b> {
     #[inline]
     fn len(&self) -> usize {
@@ -134,7 +142,11 @@ impl<'a, 'b> core::iter::ExactSizeIterator for ByteIter<'a, 'b> {
     }
 }
 
-#[allow(single_use_lifetimes, clippy::needless_lifetimes)]
+#[allow(
+    single_use_lifetimes,
+    clippy::needless_lifetimes,
+    clippy::elidable_lifetime_names
+)]
 impl<'a, 'b> core::iter::FusedIterator for ByteIter<'a, 'b> {}
 
 /// An iterator over the bytes of a [`ByteQueue`].

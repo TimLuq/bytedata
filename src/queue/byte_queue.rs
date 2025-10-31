@@ -198,10 +198,10 @@ impl<'a> ByteQueue<'a> {
     pub fn slice<R: RangeBounds<usize>>(&self, range: R) -> Self {
         let (mut start, mut max) = self.check_range(range);
         if max == 0 {
-            return Self::new();
+            return const { Self::new() };
         }
         max -= start;
-        let mut out = Self::new();
+        let mut out = const { Self::new() };
         for vv in self.chunks() {
             if max == 0 {
                 return out;
@@ -430,6 +430,7 @@ impl<'a> ByteQueue<'a> {
     pub fn into_shared<'o>(self) -> ByteQueue<'o> {
         let mut this = self;
         this.queue.make_shared();
+        // SAFETY: all chunks are now shared and can be used for any lifetime.
         unsafe { core::mem::transmute::<ByteQueue<'a>, ByteQueue<'o>>(this) }
     }
 
@@ -454,6 +455,7 @@ impl<'a> ByteQueue<'a> {
     pub fn append(&mut self, mut other: Self) {
         self.remain += other.remain;
         other.remain = 0;
+        #[allow(clippy::mem_replace_with_default)]
         self.queue
             .append(core::mem::replace(&mut other.queue, LinkedRoot::new()));
     }
@@ -488,6 +490,7 @@ impl<'a> ByteQueue<'a> {
             out
         }
         if at == 0 {
+            #[allow(clippy::mem_replace_with_default)]
             return core::mem::replace(self, Self::new());
         }
         let len = self.len();
@@ -510,6 +513,7 @@ impl<'a> ByteQueue<'a> {
     #[must_use]
     pub fn take_while<F: FnMut(u8) -> bool>(&mut self, mut fun: F) -> Self {
         let Some(position) = self.find_byte(|bte| !fun(bte)) else {
+            #[allow(clippy::mem_replace_with_default)]
             return core::mem::replace(self, Self::new());
         };
         if position == 0 {
@@ -586,12 +590,13 @@ impl From<ByteQueue<'_>> for alloc::vec::Vec<u8> {
     fn from(mut data: ByteQueue<'_>) -> Self {
         let len = data.chunk_len();
         if len == 0 {
-            return alloc::vec::Vec::new();
+            return const { Self::new() };
         }
         if len == 1 {
-            return data.pop_front().unwrap().into();
+            // SAFETY: we just checked that the queue contains exactly one chunk.
+            return unsafe { data.pop_front().unwrap_unchecked() }.into();
         }
-        let mut coll = alloc::vec::Vec::with_capacity(data.len());
+        let mut coll = Self::with_capacity(data.len());
         for i in data {
             coll.extend_from_slice(i.as_slice());
         }
@@ -656,7 +661,7 @@ impl<'a> From<ByteQueue<'a>> for ByteData<'a> {
 impl<'a> FromIterator<ByteData<'a>> for ByteQueue<'a> {
     #[inline]
     fn from_iter<T: IntoIterator<Item = ByteData<'a>>>(iter: T) -> Self {
-        let mut out = Self::new();
+        let mut out = const { Self::new() };
         for i in iter {
             out.push_back(i);
         }

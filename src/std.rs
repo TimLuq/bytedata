@@ -85,8 +85,8 @@ impl BufRead for ByteData<'_> {
     }
 
     #[inline]
-    fn consume(&mut self, amt: usize) {
-        self.make_sliced(amt..);
+    fn consume(&mut self, amount: usize) {
+        self.make_sliced(amount..);
     }
 
     #[inline]
@@ -152,8 +152,8 @@ impl BufRead for SharedBytes {
     }
 
     #[inline]
-    fn consume(&mut self, amt: usize) {
-        self.make_sliced(amt, self.len() - amt);
+    fn consume(&mut self, amount: usize) {
+        self.make_sliced(amount, self.len() - amount);
     }
 
     #[inline]
@@ -303,7 +303,7 @@ impl Read for crate::ByteQueue<'_> {
         if len == 0 {
             return Ok(0);
         }
-        let swapped = core::mem::replace(self, crate::ByteQueue::new());
+        let swapped = core::mem::replace(self, const { crate::ByteQueue::new() });
         buf.reserve(len);
         for aa in swapped.into_iter() {
             buf.extend_from_slice(&aa);
@@ -325,8 +325,8 @@ impl BufRead for crate::ByteQueue<'_> {
     }
 
     #[inline]
-    fn consume(&mut self, amt: usize) {
-        crate::ByteQueue::consume(self, amt);
+    fn consume(&mut self, amount: usize) {
+        crate::ByteQueue::consume(self, amount);
     }
 
     #[inline]

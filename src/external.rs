@@ -52,6 +52,7 @@ impl ExternalBytes for alloc::sync::Arc<[u8]> {
 }
 
 impl ExternalBytes for alloc::vec::Vec<u8> {
+    #[allow(clippy::incompatible_msrv)]
     const OPS: ExternalOps<Self> = ExternalOps::new(Self::as_slice);
 }
 

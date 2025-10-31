@@ -169,6 +169,7 @@ impl<'a> LinkedRoot<'a> {
     pub(super) fn pop_back(&mut self) -> Option<ByteData<'a>> {
         if self.count == 1 && !self.chamber.is_empty() {
             self.count = 0;
+            #[allow(clippy::mem_replace_with_default)]
             return Some(core::mem::replace(&mut self.chamber, ByteData::empty()));
         }
         // SAFETY: if the pointer is non-null it points to a valid `LinkedNodeLeaf`.
@@ -195,6 +196,7 @@ impl<'a> LinkedRoot<'a> {
         }
         if !self.chamber.is_empty() {
             self.count -= 1;
+            #[allow(clippy::mem_replace_with_default)]
             return Some(core::mem::replace(&mut self.chamber, ByteData::empty()));
         }
         // SAFETY: if the pointer is non-null it points to a valid `LinkedNodeLeaf`.
@@ -268,6 +270,7 @@ impl<'a> LinkedRoot<'a> {
 
         // attempt to move the chambered item without allocating
         if !other.chamber.is_empty() {
+            #[allow(clippy::mem_replace_with_default)]
             let chamber = core::mem::replace(&mut other.chamber, ByteData::empty());
             other.count -= 1;
             // SAFETY: if the pointer is non-null it points to a valid `LinkedNodeLeaf`.

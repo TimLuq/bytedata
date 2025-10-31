@@ -707,18 +707,17 @@ impl<'a> ByteData<'a> {
     pub fn into_shared<'s>(self) -> ByteData<'s> {
         let mut this = self;
         this.make_shared();
-        unsafe {
-            core::mem::transmute::<ByteData<'a>, ByteData<'s>>(this)
-        }
+        // SAFETY: the Shared state is owned, so it can be transformed to any lifetime.
+        unsafe { core::mem::transmute::<ByteData<'a>, ByteData<'s>>(this) }
     }
 
     #[cfg(feature = "alloc")]
     /// Transform any borrowed data into shared data. This is useful when you wish to change the lifetime of the data.
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     #[inline]
-    pub(crate) fn make_shared<'s>(&mut self) {
+    pub(crate) fn make_shared(&mut self) {
         match self.kind() {
-            Kind::Chunk | Kind::Shared | Kind::External => return,
+            Kind::Chunk | Kind::Shared | Kind::External => (),
             Kind::Slice => {
                 // SAFETY: Slice state has been checked.
                 let aa = unsafe { &self.slice };
@@ -809,7 +808,7 @@ impl<'a> ByteData<'a> {
             return ByteData::empty();
         }
         if position == self.len() {
-            return core::mem::replace(self, ByteData::empty());
+            return core::mem::replace(self, const { ByteData::empty() });
         }
         let aa = self.sliced(0..position);
         self.make_sliced(position..);
@@ -869,11 +868,11 @@ impl<'a> ByteData<'a> {
                 {
                     aa.len()
                 } else {
-                    return Some(core::mem::replace(&mut self.0, ByteData::empty()));
+                    return Some(core::mem::replace(&mut self.0, const { ByteData::empty() }));
                 };
                 if aa == 0 && self.2 {
                     self.2 = false;
-                    return Some(ByteData::empty());
+                    return const { Some(ByteData::empty()) };
                 }
                 self.2 = false;
                 let aa = self.0.take_bytes(aa);
