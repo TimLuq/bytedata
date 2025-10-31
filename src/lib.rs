@@ -223,6 +223,10 @@ mod http_body_04;
 #[cfg_attr(docsrs, doc(cfg(feature = "http-body_1")))]
 mod http_body_1;
 
+#[cfg(feature = "http_1")]
+#[cfg_attr(docsrs, doc(cfg(feature = "http_1")))]
+mod http_1;
+
 #[cfg(feature = "nom_7")]
 #[cfg_attr(docsrs, doc(cfg(feature = "nom_7")))]
 mod nom_7;

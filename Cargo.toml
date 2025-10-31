@@ -53,7 +53,8 @@ bytes_1 = ["dep:bytes_1"]
 bytes_1_safe = ["bytes_1"]
 
 http-body_04 = ["dep:http-body_04", "dep:http_02", "bytes_1"]
-http-body_1 = ["dep:http-body_1", "dep:http_1", "bytes_1"]
+http-body_1 = ["dep:http-body_1", "http_1", "bytes_1"]
+http_1 = ["dep:http_1", "bytes_1"]
 
 postgres-types_02 = ["dep:postgres-types_02", "bytes_1", "alloc"]
 
