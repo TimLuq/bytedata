@@ -60,7 +60,11 @@ impl<'a> StringQueue<'a> {
     #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
     pub fn into_shared<'o>(self) -> StringQueue<'o> {
         // SAFETY: `StringQueue` is a transparent wrapper around `ByteQueue`.
-        unsafe { core::mem::transmute::<ByteQueue<'o>, StringQueue<'o>>(self.into_bytequeue().into_shared()) }
+        unsafe {
+            core::mem::transmute::<ByteQueue<'o>, StringQueue<'o>>(
+                self.into_bytequeue().into_shared(),
+            )
+        }
     }
 
     #[cfg(feature = "alloc")]
@@ -782,5 +786,186 @@ impl Ord for crate::StringQueue<'_> {
     #[inline]
     fn cmp(&self, other: &Self) -> core::cmp::Ordering {
         self.queue.cmp(&other.queue)
+    }
+}
+
+impl<'a> TryFrom<crate::ByteQueue<'a>> for crate::StringQueue<'a> {
+    type Error = (Self, crate::ByteQueue<'a>, Option<usize>);
+
+    #[inline]
+    fn try_from(mut value: crate::ByteQueue<'a>) -> Result<Self, Self::Error> {
+        match Self::try_from(&value) {
+            Ok(val) => Ok(val),
+            Err((partial, err)) => {
+                core::mem::drop(value.drain(..partial.len()));
+                Err((partial, value, err))
+            }
+        }
+    }
+}
+
+impl<'a> TryFrom<&crate::ByteQueue<'a>> for crate::StringQueue<'a> {
+    type Error = (Self, Option<usize>);
+
+    #[allow(clippy::too_many_lines, clippy::missing_inline_in_public_items)]
+    fn try_from(value: &crate::ByteQueue<'a>) -> Result<Self, Self::Error> {
+        // check that all chunks are valid utf-8, and merge any partial boundary chunks into additional chunks
+        let mut out = StringQueue::new();
+        let mut dat = [0_u8; 14];
+        let mut dat_len = 0;
+        let mut needed = 0;
+        let mut chunk = const { crate::ByteData::empty() };
+        let mut iter = value.chunks();
+        let mut iter_ended = false;
+        loop {
+            if chunk.is_empty() && !iter_ended {
+                chunk = iter.next().cloned().unwrap_or_else(|| {
+                    iter_ended = true;
+                    const { crate::ByteData::empty() }
+                });
+            }
+            if dat_len != 0 {
+                if !chunk.is_empty() {
+                    #[allow(clippy::else_if_without_else)]
+                    if chunk.len() + dat_len <= 14 {
+                        dat[dat_len..dat_len + chunk.len()].copy_from_slice(chunk.as_slice());
+                        dat_len += chunk.len();
+                        chunk = const { crate::ByteData::empty() };
+                        continue;
+                    } else if dat_len < needed {
+                        // the best pos to split on a char boundary so the mini chunk doesn't get too much smaller than 14
+                        let best_split_pos = {
+                            let mut pos = 14 - dat_len;
+                            while pos > (needed - dat_len) {
+                                if chunk.as_slice()[pos] & 0b1100_0000 != 0b1000_0000 {
+                                    break;
+                                }
+                                pos -= 1;
+                            }
+                            pos
+                        };
+                        dat[dat_len..dat_len + best_split_pos]
+                            .copy_from_slice(&chunk.as_slice()[..best_split_pos]);
+                        chunk.make_sliced(best_split_pos..);
+                        dat_len = needed;
+                    }
+                }
+                match core::str::from_utf8(&dat[..dat_len]) {
+                    Ok(_) => {
+                        // SAFETY: all data in `dat` up to `dat_len` is valid utf-8
+                        out.push_back(unsafe {
+                            StringData::from_bytedata_unchecked(crate::ByteData::from_chunk_slice(
+                                &dat[..dat_len],
+                            ))
+                        });
+                        dat_len = 0;
+                        continue;
+                    }
+                    Err(err) => {
+                        let vut = err.valid_up_to();
+                        if vut >= needed {
+                            // SAFETY: all data up to `vut` is valid utf-8
+                            out.push_back(unsafe {
+                                StringData::from_bytedata_unchecked(
+                                    crate::ByteData::from_chunk_slice(&dat[..vut]),
+                                )
+                            });
+                            dat.copy_within(vut..dat_len, 0);
+                            dat_len -= vut;
+                            needed = match err.error_len() {
+                                None if dat[0] & 0b1111_1000 == 0b1111_0000 => 4,
+                                None if dat[0] & 0b1111_0000 == 0b1110_0000 => 3,
+                                None if dat[0] & 0b1110_0000 == 0b1100_0000 => 2,
+                                x => return Err((out, x)),
+                            };
+                            continue;
+                        }
+                        return Err((out, err.error_len()));
+                    }
+                }
+            }
+            if iter_ended {
+                return Ok(out);
+            }
+            match core::str::from_utf8(chunk.as_slice()) {
+                Ok(_) => {
+                    // SAFETY: the chunk is valid utf-8
+                    out.push_back(unsafe { StringData::from_bytedata_unchecked(chunk) });
+                    chunk = const { crate::ByteData::empty() };
+                }
+                Err(err) => {
+                    let vut = err.valid_up_to();
+                    if vut != 0 {
+                        let (valid, rest) = chunk.split_at(vut);
+                        chunk = rest;
+                        // SAFETY: `valid` is valid utf-8
+                        out.push_back(unsafe { StringData::from_bytedata_unchecked(valid) });
+                    }
+                    let fst = chunk.as_slice()[0];
+                    needed = match err.error_len() {
+                        None if fst & 0b1111_1000 == 0b1111_0000 => 4,
+                        None if fst & 0b1111_0000 == 0b1110_0000 => 3,
+                        None if fst & 0b1110_0000 == 0b1100_0000 => 2,
+                        x => return Err((out, x)),
+                    };
+                    let to_copy = needed.min(chunk.len());
+                    dat[..to_copy].copy_from_slice(&chunk.as_slice()[..to_copy]);
+                    dat_len = to_copy;
+                    chunk.make_sliced(to_copy..);
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used)]
+mod tests {
+    use super::StringQueue;
+    use crate::ByteQueue;
+
+    #[test]
+    fn test_try_from_bytequeue() {
+        {
+            let mut bq = ByteQueue::new();
+            bq.push_back(crate::ByteData::from_static(b"Hello, "));
+            bq.push_back(crate::ByteData::from_static(b"world!"));
+            let sq = StringQueue::try_from(&bq).unwrap();
+            assert_eq!(sq.len(), 13);
+            assert_eq!(sq, "Hello, world!");
+        };
+        {
+            let mut bq = ByteQueue::new();
+            bq.push_back(crate::ByteData::from_static(b"Hello, "));
+            bq.push_back(crate::ByteData::from_static(&[0xFF, 0xFE, 0xFD]));
+            bq.push_back(crate::ByteData::from_static(b"world!"));
+            let err = StringQueue::try_from(&bq).unwrap_err();
+            assert_eq!(err.0.len(), 7);
+            assert_eq!(err.1, Some(1));
+        };
+        {
+            let mut bq = ByteQueue::new();
+            for chunk in "åäö".as_bytes().chunks(3) {
+                bq.push_back(crate::ByteData::from_chunk_slice(chunk));
+            }
+            assert_eq!(bq.chunk_len(), 2);
+            let sq = StringQueue::try_from(&bq).unwrap();
+            assert_eq!(sq.chunk_len(), 2);
+            assert_eq!(sq.len(), 6);
+            let mut it = sq.chunks();
+            assert_eq!(it.next().unwrap(), "å");
+            assert_eq!(it.next().unwrap(), "äö");
+        };
+        {
+            let mut bq = ByteQueue::new();
+            for chunk in "åäö".as_bytes().chunks(1) {
+                bq.push_back(crate::ByteData::from_chunk_slice(chunk));
+            }
+            assert_eq!(bq.chunk_len(), 6);
+            let sq = StringQueue::try_from(&bq).unwrap();
+            assert_eq!(sq.chunk_len(), 1);
+            assert_eq!(sq.len(), 6);
+            assert_eq!(sq, "åäö");
+        };
     }
 }
