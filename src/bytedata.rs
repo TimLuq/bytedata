@@ -931,6 +931,13 @@ impl<'a> From<&'a [u8]> for ByteData<'a> {
     }
 }
 
+impl<'a> From<&'a str> for ByteData<'a> {
+    #[inline]
+    fn from(dat: &'a str) -> Self {
+        Self::from_borrowed(dat.as_bytes())
+    }
+}
+
 #[cfg(feature = "alloc")]
 #[cfg_attr(docsrs, doc(cfg(feature = "alloc")))]
 impl From<SharedBytes> for ByteData<'_> {
