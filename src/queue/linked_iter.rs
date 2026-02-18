@@ -2,6 +2,7 @@ use core::mem::MaybeUninit;
 
 /// An iterator over byte chunks.
 #[allow(missing_debug_implementations)]
+#[derive(Clone)]
 pub struct LinkedIter<'a, 'b> {
     #[cfg(feature = "alloc")]
     chamber: Option<&'b crate::ByteData<'a>>,
@@ -203,6 +204,7 @@ impl<'a: 'b, 'b> core::iter::FusedIterator for LinkedIter<'a, 'b> {}
 /// An iterator over string chunks.
 #[repr(transparent)]
 #[allow(missing_debug_implementations)]
+#[derive(Clone)]
 pub struct LinkedStrIter<'a, 'b> {
     inner: LinkedIter<'a, 'b>,
 }

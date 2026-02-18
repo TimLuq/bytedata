@@ -10,6 +10,7 @@
 /// format!("{:?}", ByteStringRender::from_slice(b"Hello,\nWorld!"));
 /// // => "b\"Hello,\\nWorld!\""
 /// ```
+#[derive(Clone, Copy)]
 #[repr(transparent)]
 pub struct ByteStringRender<'a>(&'a [u8]);
 
@@ -155,6 +156,7 @@ impl core::fmt::UpperHex for ByteStringRender<'_> {
 /// format!("{:?}", MultiByteStringRender::new(&[b"Hello,\n".as_slice(), b"World!"]));
 /// // => "b\"Hello,\\nWorld!\""
 /// ```
+#[derive(Clone, Copy)]
 pub struct MultiByteStringRender<'a, T, R> {
     inner: &'a T,
     _phantom: core::marker::PhantomData<R>,

@@ -2,6 +2,7 @@ use super::StringQueue;
 
 /// An iterator over the characters of a [`StringQueue`].
 #[allow(missing_debug_implementations)]
+#[derive(Clone)]
 pub struct CharIter<'a, 'b> {
     bytes: super::ByteIter<'a, 'b>,
 }
@@ -62,6 +63,7 @@ impl<'a, 'b> Iterator for CharIter<'a, 'b> {
 
 /// An iterator over the characters of a [`StringQueue`].
 #[allow(missing_debug_implementations)]
+#[derive(Clone)]
 pub struct CharIndecies<'a, 'b> {
     bytes: super::ByteIter<'a, 'b>,
     offset: usize,
@@ -123,6 +125,7 @@ impl<'a, 'b> Iterator for CharIndecies<'a, 'b> {
 
 /// An iterator over the characters of a [`StringQueue`].
 #[allow(missing_debug_implementations)]
+#[derive(Clone)]
 pub struct OwnedCharIter<'a> {
     bytes: super::OwnedByteIter<'a>,
 }

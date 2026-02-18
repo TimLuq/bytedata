@@ -4,6 +4,7 @@ use super::LinkedIter;
 
 /// An iterator over the bytes of a [`ByteQueue`].
 #[allow(missing_debug_implementations)]
+#[derive(Clone)]
 pub struct ByteIter<'a, 'b> {
     inner: LinkedIter<'a, 'b>,
     chunk: Option<&'b ByteData<'a>>,
@@ -151,6 +152,7 @@ impl<'a, 'b> core::iter::FusedIterator for ByteIter<'a, 'b> {}
 
 /// An iterator over the bytes of a [`ByteQueue`].
 #[allow(missing_debug_implementations)]
+#[derive(Clone)]
 pub struct OwnedByteIter<'a> {
     inner: super::ByteQueue<'a>,
 }

@@ -332,6 +332,25 @@ pub const unsafe fn const_slice_unchecked(
     unsafe { core::slice::from_raw_parts(data, end - start) }
 }
 
+/// Helper function for slicing mutable slices in a `const` context.
+///
+/// ## Safety
+///
+/// The caller must ensure that the range is within bounds.
+#[must_use]
+#[inline]
+pub const unsafe fn const_slice_mut_unchecked(
+    data: &'_ mut [u8],
+    range: core::ops::Range<usize>,
+) -> &'_ mut [u8] {
+    let start = range.start;
+    let end = range.end;
+    // SAFETY: the range is within bounds
+    let data = unsafe { data.as_mut_ptr().add(start) };
+    // SAFETY: the range is within bounds
+    unsafe { core::slice::from_raw_parts_mut(data, end - start) }
+}
+
 /// The different states that can occur when slicing a `str`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(clippy::exhaustive_enums)]
