@@ -8,25 +8,26 @@ use crate::ByteData;
 
 impl<'a> FromSql<'a> for ByteData<'a> {
     #[inline]
-    fn from_sql(ty: &Type, raw: &'a [u8]) -> Result<ByteData<'a>, Box<dyn Error + Sync + Send>> {
-        <&[u8] as FromSql>::from_sql(ty, raw).map(ByteData::from_borrowed)
+    fn from_sql(_ty: &Type, raw: &'a [u8]) -> Result<ByteData<'a>, Box<dyn Error + Sync + Send>> {
+        Ok(ByteData::from_borrowed(raw))
     }
 
     #[inline]
     fn accepts(ty: &Type) -> bool {
-        <&[u8] as FromSql>::accepts(ty)
+        matches!(ty, &Type::BYTEA)
     }
 }
 
 impl ToSql for ByteData<'_> {
     #[inline]
-    fn to_sql(&self, ty: &Type, w: &mut BytesMut) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
-        <&[u8] as ToSql>::to_sql(&self.as_slice(), ty, w)
+    fn to_sql(&self, _ty: &Type, w: &mut BytesMut) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
+        w.extend_from_slice(self.as_slice());
+        Ok(IsNull::No)
     }
 
     #[inline]
     fn accepts(ty: &Type) -> bool {
-        <&[u8] as ToSql>::accepts(ty)
+        matches!(ty, &Type::BYTEA)
     }
 
     fn to_sql_checked(
@@ -34,11 +35,22 @@ impl ToSql for ByteData<'_> {
         ty: &Type,
         out: &mut BytesMut,
     ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
-        if !<&str as ToSql>::accepts(ty) {
+        if !<Self as ToSql>::accepts(ty) {
             return Err(Box::new(postgres_types_02::WrongType::new::<Self>(
                 ty.clone(),
             )));
         }
         self.to_sql(ty, out)
     }
+}
+
+#[test]
+fn test_postgres_02_bytedata() {
+    let test_value = crate::ByteData::from_static(b"Hello, world!");
+    ToSql::to_sql_checked(
+        &test_value,
+        &Type::BYTEA,
+        &mut postgres_types_02::private::BytesMut::new(),
+    )
+    .unwrap();
 }

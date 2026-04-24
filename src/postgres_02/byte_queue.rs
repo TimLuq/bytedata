@@ -9,12 +9,12 @@ use crate::ByteQueue;
 impl<'a> FromSql<'a> for ByteQueue<'a> {
     #[inline]
     fn from_sql(ty: &Type, raw: &'a [u8]) -> Result<ByteQueue<'a>, Box<dyn Error + Sync + Send>> {
-        <&[u8] as FromSql>::from_sql(ty, raw).map(ByteQueue::from)
+        <crate::ByteData<'a> as FromSql>::from_sql(ty, raw).map(ByteQueue::with_item)
     }
 
     #[inline]
     fn accepts(ty: &Type) -> bool {
-        <&[u8] as FromSql>::accepts(ty)
+        matches!(ty, &Type::BYTEA)
     }
 }
 
@@ -29,7 +29,7 @@ impl ToSql for ByteQueue<'_> {
 
     #[inline]
     fn accepts(ty: &Type) -> bool {
-        <&[u8] as ToSql>::accepts(ty)
+        matches!(ty, &Type::BYTEA)
     }
 
     fn to_sql_checked(
@@ -37,7 +37,7 @@ impl ToSql for ByteQueue<'_> {
         ty: &Type,
         out: &mut BytesMut,
     ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
-        if !<&str as ToSql>::accepts(ty) {
+        if !<Self as ToSql>::accepts(ty) {
             return Err(Box::new(postgres_types_02::WrongType::new::<Self>(
                 ty.clone(),
             )));

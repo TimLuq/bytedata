@@ -8,25 +8,26 @@ use crate::SharedBytes;
 
 impl<'a> FromSql<'a> for SharedBytes {
     #[inline]
-    fn from_sql(ty: &Type, raw: &'a [u8]) -> Result<SharedBytes, Box<dyn Error + Sync + Send>> {
-        <&[u8] as FromSql>::from_sql(ty, raw).map(SharedBytes::from)
+    fn from_sql(_ty: &Type, raw: &'a [u8]) -> Result<SharedBytes, Box<dyn Error + Sync + Send>> {
+        Ok(SharedBytes::from(raw))
     }
 
     #[inline]
     fn accepts(ty: &Type) -> bool {
-        <&[u8] as FromSql>::accepts(ty)
+        matches!(ty, &Type::BYTEA)
     }
 }
 
 impl ToSql for SharedBytes {
     #[inline]
-    fn to_sql(&self, ty: &Type, w: &mut BytesMut) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
-        <&[u8] as ToSql>::to_sql(&self.as_slice(), ty, w)
+    fn to_sql(&self, _ty: &Type, w: &mut BytesMut) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
+        w.extend_from_slice(self.as_slice());
+        Ok(IsNull::No)
     }
 
     #[inline]
     fn accepts(ty: &Type) -> bool {
-        <&[u8] as ToSql>::accepts(ty)
+        matches!(ty, &Type::BYTEA)
     }
 
     fn to_sql_checked(
@@ -34,7 +35,7 @@ impl ToSql for SharedBytes {
         ty: &Type,
         out: &mut BytesMut,
     ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
-        if !<&str as ToSql>::accepts(ty) {
+        if !<Self as ToSql>::accepts(ty) {
             return Err(Box::new(postgres_types_02::WrongType::new::<Self>(
                 ty.clone(),
             )));

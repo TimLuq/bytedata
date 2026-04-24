@@ -37,7 +37,7 @@ impl ToSql for StringQueue<'_> {
         ty: &Type,
         out: &mut BytesMut,
     ) -> Result<IsNull, Box<dyn Error + Sync + Send>> {
-        if !<&str as ToSql>::accepts(ty) {
+        if !<Self as ToSql>::accepts(ty) {
             return Err(Box::new(postgres_types_02::WrongType::new::<Self>(
                 ty.clone(),
             )));
