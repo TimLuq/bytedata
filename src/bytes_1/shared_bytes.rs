@@ -9,12 +9,26 @@ use ::bytes_1 as bytes;
 use crate::SharedBytes;
 
 #[cfg(not(feature = "bytes_1_safe"))]
+unsafe fn drop_shared_bytes(data: *mut ()) {
+    let p = data.cast::<crate::SharedBytesMeta>();
+    let Some(meta) = p.as_ref() else {
+        return;
+    };
+    if meta.refcnt.fetch_sub(1, Ordering::Relaxed) != 1 {
+        return;
+    }
+    let layout = alloc::alloc::Layout::from_size_align(meta.len as usize, meta.align()).unwrap();
+    alloc::alloc::dealloc(p.cast::<u8>(), layout);
+}
+
+#[cfg(not(feature = "bytes_1_safe"))]
 /// A vtable compatible with bytes::Vtable.
 static SHARED_BYTES_BVT: super::SBytesVtable = super::SBytesVtable {
     clone: |data, ptr, len| {
         let p = data.load(Ordering::Relaxed);
-        let meta = unsafe { &*(p as *const crate::SharedBytesMeta) };
-        meta.refcnt.fetch_add(1, Ordering::Relaxed);
+        if let Some(meta) = unsafe { p.cast::<crate::SharedBytesMeta>().as_ref() } {
+            meta.refcnt.fetch_add(1, Ordering::Relaxed);
+        }
         super::SBytes {
             ptr,
             len,
@@ -23,43 +37,44 @@ static SHARED_BYTES_BVT: super::SBytesVtable = super::SBytesVtable {
         }
         .into_bytes()
     },
-    to_vec: |_data, ptr, len| {
-        if len == 0 {
-            return Vec::new();
-        }
-        let mut vec = Vec::with_capacity(len);
-        unsafe {
-            core::ptr::copy_nonoverlapping(ptr, vec.as_mut_ptr(), len);
-            vec.set_len(len);
-        }
-        vec
+    into_vec: |data, ptr, len| {
+        let ret = if len == 0 {
+            Vec::new()
+        } else {
+            let mut vec = Vec::with_capacity(len);
+            unsafe {
+                core::ptr::copy_nonoverlapping(ptr, vec.as_mut_ptr(), len);
+                vec.set_len(len);
+            }
+            vec
+        };
+        unsafe { drop_shared_bytes(data) };
+        ret
     },
-    to_mut: |_data, ptr, len| {
-        if len == 0 {
-            return bytes::BytesMut::new();
-        }
-        let mut vec = bytes::BytesMut::with_capacity(len);
-        unsafe {
-            core::ptr::copy_nonoverlapping(ptr, vec.as_mut_ptr(), len);
-            vec.set_len(len);
-        }
-        vec
+    into_mut: |data, ptr, len| {
+        let ret = if len == 0 {
+            bytes::BytesMut::new()
+        } else {
+            let mut vec = bytes::BytesMut::with_capacity(len);
+            unsafe {
+                core::ptr::copy_nonoverlapping(ptr, vec.as_mut_ptr(), len);
+                vec.set_len(len);
+            }
+            vec
+        };
+        unsafe { drop_shared_bytes(data) };
+        ret
     },
     is_unique: |data| unsafe {
-        let p = data.load(Ordering::Relaxed);
-        let meta = &*(p as *const crate::SharedBytesMeta);
+        let p = data
+            .load(Ordering::Relaxed)
+            .cast::<crate::SharedBytesMeta>();
+        let Some(meta) = p.as_ref() else {
+            return true;
+        };
         meta.refcnt.load(Ordering::Relaxed) == 1
     },
-    drop: |data, _ptr, _len| unsafe {
-        let p = data.load(Ordering::Relaxed) as *mut u8;
-        let meta = &*(p as *const crate::SharedBytesMeta);
-        if meta.refcnt.fetch_sub(1, Ordering::Relaxed) != 1 {
-            return;
-        }
-        let layout =
-            alloc::alloc::Layout::from_size_align(meta.len as usize, meta.align()).unwrap();
-        alloc::alloc::dealloc(p, layout);
-    },
+    drop: |data, _ptr, _len| unsafe { drop_shared_bytes(data) },
 };
 
 #[cfg(feature = "bytes_1_safe")]

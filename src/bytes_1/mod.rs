@@ -44,10 +44,10 @@ struct SBytesVtable {
     /// fn(data, ptr, len)
     ///
     /// takes `Bytes` to value
-    pub to_vec: unsafe fn(&AtomicPtr<()>, *const u8, usize) -> alloc::vec::Vec<u8>,
-    pub to_mut: unsafe fn(&AtomicPtr<()>, *const u8, usize) -> bytes::BytesMut,
+    pub into_vec: unsafe fn(*mut (), *const u8, usize) -> alloc::vec::Vec<u8>,
+    pub into_mut: unsafe fn(*mut (), *const u8, usize) -> bytes::BytesMut,
     /// fn(data)
     pub is_unique: unsafe fn(&AtomicPtr<()>) -> bool,
     /// fn(data, ptr, len)
-    pub drop: unsafe fn(&mut AtomicPtr<()>, *const u8, usize),
+    pub drop: unsafe fn(*mut (), *const u8, usize),
 }
